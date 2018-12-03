@@ -1,0 +1,184 @@
+#!/bin/sh
+
+# Torque/PBS accounting script for use with the DCSC accounting software.
+# It is based upon the pbsacct package available from ftp://ftp.fysik.dtu.dk/pub/Torque/
+# The command "pbsjobs" from that package (version 1.4.5 or higher) is required.
+
+if [ $# -ne 1 ] ; then
+	echo Usage: $0 Torque-daily-accounting-filename
+	echo The filename should be of the form YYYYMMDD
+	exit 1
+fi
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# Verify that the MAUI_NODEACCESSPOLICY is consistent with current MAUI config
+SHOWCONFIG=$BINDIR/showconfig
+if test -x $SHOWCONFIG
+then
+	NODEACCESSPOLICY=`$SHOWCONFIG | grep NODEACCESSPOLICY | awk '{print $2}'`
+	if test "$MAUI_NODEACCESSPOLICY" != "$NODEACCESSPOLICY"
+	then
+		echo ERROR: Inconsistent MAUI NODEACCESSPOLICY:
+		echo $MAUI_NODEACCESSPOLICY is not = $NODEACCESSPOLICY
+		exit 1		# We decide to bail out here (may be omitted)
+	fi
+fi
+
+# Accounting for entire nodes in stead of #CPU cores used.
+if test MAUI_NODEACCESSPOLICY = "SHARED"
+then
+	# Case of shared nodes
+	SINGLE=""
+else
+	# Case where entire nodes are reserved
+	SINGLE="-S"
+fi
+
+# Define the sorting of columns in the output
+SORTKEY=4
+
+# Location of the Torque accounting file
+FILENAME=$1
+ACCTFILE=$TORQUEACCTDIR/$1
+
+if [ ! -s $ACCTFILE ]
+then
+	echo WARNING: Torque accounting file $ACCTFILE does not exist or is empty.
+	exit 0
+fi
+if [ ! -r $ACCTFILE ]
+then
+	echo ERROR: Torque accounting file $ACCTFILE is unreadable:
+	ls -l $ACCTFILE
+	exit 1
+fi
+
+# The pbsjobs accounting-information extractor script:
+# May be set by an environment variable.
+if [ -z "${PBSJOBS}" ] ; then
+	PBSJOBS="${BINDIR}/pbsjobs";
+fi
+if [ ! -x "${PBSJOBS}" ] ; then
+	echo No ${PBSJOBS} executable found
+	exit 1
+fi
+
+# A working file
+JOBTEMP=/tmp/pbsjobs.$$
+# Trap error signals:
+trap "rm -f ${JOBTEMP}; exit 2" 1 2 3 14 15 19
+
+#
+# End of setup
+#
+#---------------------------------------------------------------
+
+cat $ACCTFILE | $PBSJOBS $SINGLE > ${JOBTEMP}
+
+#
+# Calculate the epoch time on this day at 23:59:59.
+#
+# Today's date is calculated from the end-time of the LAST job in the file.
+LASTJOBDATE=`tail -1 ${JOBTEMP} | awk '{print $7}'`
+
+PERIOD_EPOCH=`echo $LASTJOBDATE | awk -F/ '
+{
+	midnight = sprintf("%4.4d %2.2d %2.2d 23 59 59", $3, $1, $2)
+	print mktime(midnight)
+}'`
+
+if test $PERIOD_EPOCH -le 0
+then
+	echo ERROR: Bad PERIOD_EPOCH=$PERIOD_EPOCH for job date $LASTJOBDATE
+	exit 1
+fi
+# Previous version:
+# Extract the epoch time of the end-time of the LAST job in the file,
+# representing the end of this accounting period.
+# PERIOD_EPOCH=`tail -1 ${JOBTEMP} | awk '{print $10}'`
+
+cat ${JOBTEMP} | awk -vPERIOD_EPOCH=$PERIOD_EPOCH -vDCSC_SITE=$DCSC_SITE -vMACHINE=$MACHINE -vUNIXGROUPS=$UNIXGROUPS -vGRANTS=$GRANTS '
+{
+	# Parse input data
+	user	= $2		# User name
+	group	= $3		# Group name
+	queue	= $4		# Queue name
+	nodect	= $5		# Number of nodes used
+	cput	= $6		# CPU time in seconds
+	start	= $9		# Job start time in epoch seconds
+	end	= $10		# Job end time in epoch seconds
+	wall	= $11		# Wallclock time in seconds
+	wait	= $13		# Waiting time in seconds
+	total_ncpus = $14	# Total number of CPUs used (>=nodect)
+	exit_status = $15	# Job Exit_status
+
+	# User accounting
+	username[user] = user
+	usergroup[user] = group
+	wallnodessecs[user] += total_ncpus*wall
+} END {
+	# Get the list of DCSC grant groups from the UNIXGROUPS file
+	while ((getline < UNIXGROUPS) > 0) {
+		if ($0 ~ "^[ 	]*#") continue	# Skip comment lines
+		if ($0 ~ "^[ 	]*$") continue	# Skip blank lines
+		split($0,b,":")			# Split line into fields
+		grantunixgroup[b[1]] = b[2]	# DCSC Grant group b[2] of this UNIX groupname b[1]
+	}
+	close(UNIXGROUPS)
+
+	# Get the grant periods from the GRANTS database.
+	# A grant group may have multiple time-overlapping grants.
+	while ((getline < GRANTS) > 0) {
+		if ($0 ~ "^[ 	]*#") continue	# Skip comment lines
+		if ($0 ~ "^[ 	]*$") continue	# Skip blank lines
+		split($0,b,":")			# Split line into fields
+		grantname = b[1]		# Name of this grant 
+		grantgroup = b[2]		# Name of this grant group
+		grantgrouplist[grantgroup] = grantgroup	# List of grant group names
+		grantsponsor = b[3]		# Sponsor of this grant group (DCSC or LOCAL)
+		cpucores = b[6]			# Number of CPU cores for this grant group
+		diskspace = b[7]		# Diskspace (TB) for this grant group
+		grantstart = b[8]		# Start date of this grant (format DD/MM/YYYY)
+		grantend = b[9]			# Ending date of this grant (format DD/MM/YYYY)
+		# Convert dates to epoch times
+		split(grantstart,b,"/")		# Split date into fields
+		grantstartepoch = mktime(sprintf("%4.4d %2.2d %2.2d 00 00 00", b[3], b[2], b[1]))
+		split(grantend,b,"/")		# Split date into fields
+		grantendepoch =   mktime(sprintf("%4.4d %2.2d %2.2d 23 59 59", b[3], b[2], b[1]))
+		# DEBUG: print PERIOD_EPOCH, grantstart, grantstartepoch, grantend, grantendepoch
+
+		# If the PERIOD_EPOCH is inside this grant, then calculate the resources
+		if (PERIOD_EPOCH >= grantstartepoch && PERIOD_EPOCH <= grantendepoch) {
+			if (grantsponsor == "DCSC") groupcores_dcsc[grantgroup] += cpucores
+			if (grantsponsor == "LOCAL") groupcores_local[grantgroup] += cpucores
+			# DEBUG: print grantgroup, grantsponsor, cpucores
+		}
+	}
+	close(GRANTS)
+
+	for (user in username) {
+		grantgroup = grantunixgroup[usergroup[user]]
+		if (grantgroup == "") grantgroup = "NOGROUP"	# Catch missing UNIX groups
+		num_users[grantgroup]++			# Count users in each grantgroup
+		# Output format (colon separated):
+		# DCSC-center Installation-name Username Group Walltime(core-days) Today(epoch) Group-cores-DCSC Group-cores-local
+		printf("%s:%s:%s:%s:%f:%d:%d:%d\n",
+			DCSC_SITE, MACHINE, username[user], grantgroup, wallnodessecs[user]/86400,
+			PERIOD_EPOCH, groupcores_dcsc[grantgroup], groupcores_local[grantgroup])
+	}
+	# Check if any groups have zero usage: If so, append a zero-usage record (for nicer rrdtool graphs)
+	for (grantgroup in grantgrouplist) {
+		if (num_users[grantgroup] == 0) printf("%s:%s:%s:%s:%f:%d:%d:%d\n",
+			DCSC_SITE, MACHINE, "NOUSER", grantgroup, 0,
+			PERIOD_EPOCH, groupcores_dcsc[grantgroup], groupcores_local[grantgroup])
+	}
+} ' | sort -d -t: -k $SORTKEY > $DCSCACCT/$FILENAME.db
+
+echo Accounting database written to $DCSCACCT/$FILENAME.db
+
+rm -f ${JOBTEMP}
+exit 0

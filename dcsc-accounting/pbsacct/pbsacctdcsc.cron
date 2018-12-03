@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# This script should be run every day from cron at 23:59, processing the Torque daily
+# accounting record for the current day.  A typical crontab entry would be:
+# 59 23 * * * /usr/local/bin/pbsacctdcsc.cron
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# Calculate the name of the Torque accounting file from today's date:
+ACCTFILE=`$DATE +%Y%m%d`
+
+# We assume that this script is run at 23:59, and so we wait for 2 minutes until
+# midnight has passed and Torque has completed and closed today's accounting file.
+sleep 120
+
+# Now generate daily accounting database record
+$BINDIR/pbsacctdcsc $ACCTFILE

@@ -1,0 +1,37 @@
+
+Version 1.5
+-----------
+* In dailygraphs/ added 3 new scripts for creating and maintaining an RRD database
+  for the DCSC grants: rrdcreategrants, rrdupdategrants, rrdupdategrants.cron.
+  This RRD database is used by rrdgraphsystem to calculate the number of DCSC 
+  grant cores on a daily basis and display them in the system graphs.
+* pbsacctdcsc in pbsacct/ has now prints zero-usage daily records for groups
+  with zero usage.  This is needed to display DCSC and Local lines in the
+  usage graphs without gaps (discontinuities).
+* rrdgraphgroupall: Copy grants to $WWWDIR as $MACHINE.grants.
+* config: Made "showq" a configurable variable (used in rrdupdatesystem).
+* config: Made "date" a configurable command (for use on UNIX systems).
+* config: Made "SKIPZEROGRAPH" a configurable variable (used in rrdgraphgroup).
+
+Version 1.3
+-----------
+* Moved all the Torque/PBS daily accounting scripts to a new subdirectory pbsacct/.
+* Created a new subdirectory dailygraphs/ for scripts that generate daily graphs 
+  from the daily accounting records.
+* Created a new subdirectory WWW/ for webserver scripts.
+* For daily accounting records the rrdtool database now works with timestamps
+  in UTC time.
+
+Version 1.2
+-----------
+grants: Comment lines now permitted, starting with (white space) #
+       Suggested by Niels Carl Hansen.
+
+Version 1.1
+-----------
+config: Introduced the TORQUEHOME homedir for Torque.
+       Introduced MAUI_NODEACCESSPOLICY for accounting of entire nodes.
+
+Version 1.0
+-----------
+Initial release January 23, 2009 by Ole Holm Nielsen, DCSC/DTU

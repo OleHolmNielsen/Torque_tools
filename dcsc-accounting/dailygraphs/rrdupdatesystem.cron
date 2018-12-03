@@ -1,0 +1,22 @@
+#!/bin/bash
+
+#
+# Update system RRD database and generate graphs
+#
+#  A typical crontab entry would update the system load statistics every 5 minutes:
+# */5 * * * * /usr/local/bin/rrdupdatesystem.cron
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+#
+# Update the system RRD database 
+#
+$BINDIR/rrdupdatesystem
+
+#
+# Generate system accounting graphs 
+#
+$BINDIR/rrdgraphsystem

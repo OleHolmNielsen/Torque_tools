@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Update rrdtool database with data for the system
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+RRDDB=$DAILYGRAPHS/system.rrd
+if test ! -r $RRDDB
+then
+	echo Error: RRD database file $RRDDB does not exist
+	exit 1
+fi
+
+RRDTOOL=/usr/bin/rrdtool
+if test ! -x $RRDTOOL
+then
+	echo ERROR: RRDTOOL not found as $RRDTOOL
+	exit -1
+fi
+
+# Deprecated:
+# Ownership of cores (this should be calculated from the "grants" file on a daily basis)
+DCSC_cores=1009
+LOCAL_cores=343
+# total=$($DCSC_cores+$LOCAL_cores)
+
+#
+# Get system batch queue snapshot: available, running, pending, hold CPU cores
+#
+
+# A temporary working file
+TEMP=/tmp/queue.$$
+# Trap error signals:
+trap "rm -f ${TEMP}; exit 2" 1 2 3 14 15 19
+
+#
+# MAUI scheduler case:
+#
+# Make snapshot of the queue status using MAUI "showq"
+errmsg=`$SHOWQ > ${TEMP}`
+if test -n "$errmsg"
+then
+	echo $0: Errors from $SHOWQ: $errmsg
+	exit 1
+fi
+# Adding a 0 to the printouts gives "0" in the case of no data.
+total=`grep 'Processors Active' ${TEMP} | $AWK '{print $6+0}'`
+running=`$AWK '$3=="Running" { sum += $4 } END {print sum+0}' < ${TEMP}`
+pending=`$AWK '$3=="Idle" { sum += $4 } END {print sum+0}' < ${TEMP}`
+hold=`$AWK '$3=="Hold" { sum += $4 } END {print sum+0}' < ${TEMP}`
+# DEBUG: echo Total=$total running=$running pending=$pending hold=$hold
+
+#
+# IBM LoadLeveler case: to be written
+#
+# Make snapshot of the queue status using "llstatus" ?
+
+#
+# SUN Grid Engine case: to be written
+#
+
+#
+# Update the RRD database (timestamp=Now)
+#
+$RRDTOOL update $RRDDB N:$running:$total:$DCSC_cores:$pending:$hold
+
+# Cleanup
+rm -f ${TEMP}

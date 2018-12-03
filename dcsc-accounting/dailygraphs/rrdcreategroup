@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Create rrdtool database for a DCSC grant group
+
+if test $# -ne 1
+then
+	echo Usage: $0 grant-group
+	exit -1
+fi
+GRANTGROUP=$1
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+RRDDB=$DAILYGRAPHS/$GRANTGROUP.daily.rrd
+if test -r $RRDDB
+then
+	echo Error: RRD database file $RRDDB already exists
+	exit 1
+fi
+
+RRDTOOL=/usr/bin/rrdtool
+if test ! -x $RRDTOOL
+then
+	echo ERROR: RRDTOOL not found as $RRDTOOL
+	exit -1
+fi
+
+#
+# Define the earliest possible time (01/01 2002 at 00:00:00 in UTC timezone):
+#
+# WARNING: The rrdtool database uses UTC time internally, but our accounting records
+# are made for calendar days in LOCAL TIME. Therefore:
+# DO NOT TRY to reprogram these scripts to use local time with rrdtool !!!
+# UTC time MUST be used for all daily graphs!
+#
+# Further information can be read in this rrdtool mailing list thread:
+# https://lists.oetiker.ch/pipermail/rrd-users/2009-February/015305.html
+#
+# STARTTIME=`echo | $AWK '{print mktime("2002 01 01 00 00 00")}'`
+STARTTIME=`$DATE -ud 2002-01-01\ 00:00 +%s`
+# The time step is 1 day (86400 seconds)
+STEPTIME=86400
+# Heartbeat
+HEARTBEAT=$[$STEPTIME*2]
+
+# The database contains:
+# * Grant group cores used (unit: CPU core days)
+# * DCSC cores used
+# * LOCAL cores used
+# * Daily average (1 days)
+
+# Create the database
+echo Creating rrdtool database $RRDDB starting at $STARTTIME with step $STEPTIME
+$RRDTOOL create $RRDDB \
+	--start $STARTTIME --step $STEPTIME \
+	DS:running:GAUGE:$HEARTBEAT:0:U \
+	DS:DCSC:GAUGE:$HEARTBEAT:0:U \
+	DS:LOCAL:GAUGE:$HEARTBEAT:0:U \
+	RRA:AVERAGE:0.5:1:3650 \
+	RRA:AVERAGE:0.5:7:500

@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Create database records from old accounting records
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# Go the the Torque accounting directory
+cd $TORQUEACCTDIR
+for i in 20??????
+do
+	$BINDIR/pbsacctdcsc $i
+done
+
+# Remove the database record for today's date (it'll still be incomplete)
+TODAY=`$DATE +%Y%m%d`
+echo Removing incomplete database record for today: $TODAY
+rm -f $TODAY.db

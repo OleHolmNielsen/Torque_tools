@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Create graphs for all groups:
+# To be run daily after the rrd -databases have been updated.
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+cd $DAILYGRAPHS
+
+# Create a list of all groups from the "grants" file
+GROUPLIST=`cat $GRANTS | $AWK -F: '
+{
+	if ($0 ~ "^[ 	]*#") next      # Skip comment lines
+	if ($0 ~ "^[ 	]*$") next      # Skip blank lines
+	printf("%s.daily.rrd\n", $2)	# Print grant group name + .daily.rrd
+}' | sort | uniq`
+
+for rrd in $GROUPLIST
+do
+	echo Graphing RRD database $rrd
+	$BINDIR/rrdgraphgroup $rrd > /dev/null
+done
+
+echo "Copying the grants (prepended by machinename) and site files to the WWW directory $WWWDIR"
+cp -p $GRANTS $WWWDIR/$MACHINE.grants
+cp -p $SITE $WWWDIR/

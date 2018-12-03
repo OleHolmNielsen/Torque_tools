@@ -1,0 +1,16 @@
+#! /bin/bash
+
+# After initial RRD database creation, load data from old accounting records
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# Go the the Torque accounting database directory
+cd $DCSCACCT
+for i in 20??????.db
+do
+	echo Loading $i
+	$BINDIR/rrdupdategroup $i
+done

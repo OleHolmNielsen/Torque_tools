@@ -1,0 +1,40 @@
+Install rrdtool
+===============
+
+First install the rrdtool software, the homepage is at
+http://oss.oetiker.ch/rrdtool/.  We have tested this software
+at rrdtool version 1.2.29.
+
+On RPM and YUM based systems (such as RedHat5/CentOS5) you can do:
+   yum install rrdtool
+or get the RPM packages from the http://rpmforge.net directory
+http://packages.sw.be/rrdtool/.  For RHEL4 you need the 
+packages rrdtool and perl-rrdtool (and perhaps also perl-Time-HiRes).
+
+On Debian systems: (Torben ?)
+On SUN Solaris systems: (Boyan Lazarov ?)
+
+Rrdtool documentation
+---------------------
+
+We follow Anders Rhod Gregersen's graph definitions for the Fyrkat installation
+in Aalborg.  For an introduction to rrdtool see
+http://oss.oetiker.ch/rrdtool/tut/rrd-beginners.en.html
+
+For rrdtool documentation see http://oss.oetiker.ch/rrdtool/doc/.
+For documentation of rrdtool database creation see
+http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html.
+
+Useful rrdtool commands
+-----------------------
+
+You can look into an rrdtool command with several commands, here are some examples
+for some general database database.rrd:
+
+* rrdtool info database.rrd (see "man rrdinfo")
+
+* rrdtool lastupdate database.rrd (see "man rrdlastupdate")
+
+* rrdtool dump database.rrd (see "man rrddump")
+
+* rrdtool last database.rrd (see "man rrdlast")

@@ -1,0 +1,58 @@
+#
+# DCSC grants
+#
+# Comment lines begin with a # (may be preceded by white space).
+# Line format is:
+# Grant-name:Group:Sponsor:Personal-name:E-mail:Number-CPU-cores:Disk-capacity:Start-date:End-date:Comments
+#
+###################################################################################################
+#
+# DCSC/DTU Niflheim grants
+#
+###################################################################################################
+HDW-2006-KWJ:DTU-CAMD:DCSC:Karsten W. Jacobsen:kwj@fysik.dtu.dk:548:3.5:1/9/2006:31/8/2009:CAMD DCSC 2006
+HDW-2006-HAMMER:AU-Hammer:DCSC:Bjørk Hammer:hammer@phys.au.dk:125:0.36:1/9/2006:31/8/2009:Hammer DCSC 2006
+HDW-0107-07:DTU-CAMD:DCSC:Thomas Bligaard:bligaard@fysik.dtu.dk:336:0:1/10/2007:30/9/2010:CAMD DCSC 2007
+HDW-2008-KWJ:DTU-CAMD:DCSC:Karsten W. Jacobsen:kwj@fysik.dtu.dk:750:1.0:1/6/2009:31/5/2012:CAMD DCSC 2008
+HDW-2008-MBR:DTU-Nanotech:DCSC:Mads Brandbyge:MBr@nanotech.dtu.dk:50:0.54:1/6/2009:31/5/2012:Brandbyge DCSC 2008
+CAMD-2006-HTF:DTU-CAMD:LOCAL:Jens Nørskov:norskov@fysik.dtu.dk:47:0.54:1/9/2006:31/8/2016:CAMD Højteknologifonden
+CAMD-2006-LBF:DTU-CAMD:LOCAL:Jens Nørskov:norskov@fysik.dtu.dk:96:0:1/9/2006:31/8/2016:CAMD Lundbeckfonden
+CAMD-2007-LBF:DTU-CAMD:LOCAL:Jens Nørskov:norskov@fysik.dtu.dk:200:0:1/10/2007:30/9/2017:CAMD Lundbeckfonden
+Free-Resources:DCSC-FR:DCSC:DCSC Free Resources:belso@dcsc.dk:0:0.25:1/9/2002:30/9/2017:DCSC Free Resources
+Undefined-group:NOGROUP:DCSC:Undefined group:belso@dcsc.dk:0:0:1/9/2002:30/9/2017:Undefined group in unixgroups
+#
+###################################################################################################
+#
+# CSC-AU grants
+#
+###################################################################################################
+#  SUN x2200 udvidelsen af Grendel, granted juni 2008.
+HDW-2008-POU:POU-AU:DCSC:Poul Jørgensen:pou@chem.au.dk:240:0:1/1/2009:31/12/2011:DCSC 2008 POU
+HDW-2008-OC:OC-AU:DCSC:Ove Christiansen:ove@chem.au.dk:240:0:1/1/2009:31/12/2011:DCSC 2008 OC 
+HDW-2008-KAJ:KAJ-AU:DCSC:Karl Anker Jørgensen:kaj@chem.au.dk:72:0:1/1/2009:31/12/2011:DCSC 2008 KAJ
+HDW-2008-ZQEX:ZQEX-AU:DCSC:Carsten Svaneborg:zqex@chem.au.dk:96:0:1/1/2009:31/12/2011:DCSC 2008 ZQEX
+HDW-2008-FRJ:FRJ-AU:DCSC:Frank Jensen:frj@chem.au.dk:410:0:1/1/2009:31/12/2011:DCSC 2008 FRJ
+#  Dette er Franks lokale anskaffelse
+HDW-2008-FRJ:FRJ-AU:LOCAL:Frank Jensen:frj@chem.au.dk:0:8:1/1/2009:31/14/2009:LOCAL 2008 FRJ disks
+HDW-2008-BH:BH-AU:DCSC:Bjørk Hammer:hammer@phys.au.dk:410:0:1/1/2009:31/12/2011:DCSC 2008 BH
+HDW-2008-KPJ:KPJ-DTU:DCSC:Kasper P. Jensen:kpj@kemi.dtu.dk:48:0:1/1/2009:31/12/2011:DCSC 2008 KPJ
+HDW-2008-STH:STH-AU:DCSC:Steen Hannestad:sth@phys.au.dk:240:0:1/1/2009:31/12/2011:DCSC 2008 STH
+HDW-2008-NCN:NCN-AU:DCSC:Niels Chr. Nielsen:ncn@chem.au.dk:528:0:1/1/2009:31/12/2011:DCSC 2008 NCN
+Free-Resources:FR-DCSC:DCSC:CSCAA Director:nec@phys.au.dk:252:0:1/1/2009:31/12/2011:DCSC Free Resources
+###################################################################################################
+#  Dell udvidelsen af Grendel, granted juni 2007.
+HDW-0107-09:BJC-AU:DCSC:Bent Jesper Christensen:bjchristensen@econ.au.dk:102:0:16/8/2007:15/8/2010:DCSC 2007 BJC
+HDW-0107-13:OC-AU:DCSC:Ove Christiansen:ove@chem.au.dk:210:0:16/8/2007:15/8/2010:DCSC 2007 OC
+CPU-0107-05:KPJ-DTU:DCSC:Kasper P. Jensen:kpj@kemi.dtu.dk:27:0:16/8/2007:15/8/2010:DCSC 2007 KPJ
+Free-Resources:FR-DCSC:DCSC:CSCAA Director:nec@phys.au.dk:37:0:16/8/2007:15/8/2010:DCSC Free Resources
+###################################################################################################
+#  SUN x2100 anskaffelsen af Grendel, granted december 2005.
+HDW-1105-08:STH-AU:DCSC:Steen Hannestad:sth@phys.au.dk:47:0:1/9/2006:31/8/2009:DCSC 2005 STH
+HDW-1105-11:NEC-AU:DCSC:Niels Egede Christensen:nec@phys.au.dk:75:0:1/9/2006:31/8/2009:DCSC 2005 NEC
+HDW-1105-03:LB-AU:DCSC:Lars Bojer Madsen:bojer@phys.au.dk:47:0:1/9/2006:31/8/2009:DCSC 2005 LB
+HDW-1106-11:OC-AU:DCSC:Ove Christiansen:ove@chem.au.dk:141:0:1/9/2006:31/8/2009:DCSC 2005 OC
+Free-Resources:FR-DCSC:DCSC:CSCAA Director:nec@phys.au.dk:34:0:1/9/2006:31/8/2009:DCSC Free Resources
+###################################################################################################
+# Dette er FAKE  tildelinger
+HDW-2006-NCWH:CSCAA:DCSC:Niels Carl Hansen:ncwh@cscaa.dk:0:0:1/1/2006:31/12/2012:Temporary
+#

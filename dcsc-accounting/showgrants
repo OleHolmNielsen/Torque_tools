@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Display grants database in a more readable format.  The compact format is:
+# Grant-name:Group:Sponsor:Personal-name:E-mail:Number-CPU-cores:Disk-capacity:Start-date:End-date:Comments
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# echo "HDW-2006-KWJ    DTU-CAMD     DCSC  Karsten W. Jacobsen       kwj@fysik.dtu.dk            548   3.50   1/9/2006  31/8/2009 CAMD DCSC 2006"
+echo "Grantname       Grant-group Sponsor Name                     E-mail                     CPUs   Disk   Starting     Ending  Comment"
+
+cat $GRANTS | awk -F: '
+/^[ 	]*#/{next}	# Comment lines
+/^[ 	]*$/{next}	# Blank lines
+{
+	printf("%-15s %-12s %-5.5s %-25.25s %-25.25s %5d %6.2f %10.10s %10.10s  %-s\n",
+		$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+}'
+
+# Bug: Danish characters æ,ø,å are encoded as 2 bytes but may display only as 1 character.

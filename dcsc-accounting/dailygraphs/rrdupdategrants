@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# Update rrdtool database with grants data for a single day
+
+if test $# -ne 1
+then
+	echo Usage: $0 YYYYMMDD '(date)'
+	exit -1
+fi
+
+# The date (format: YYYYMMDD) for which the grant is requested
+GRANTDATE=$1
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# The system grants RRD database
+RRDDB=$DAILYGRAPHS/systemgrants.daily.rrd
+
+RRDTOOL=/usr/bin/rrdtool
+if test ! -x $RRDTOOL
+then
+	echo ERROR: RRDTOOL not found as $RRDTOOL
+	exit -1
+fi
+
+# Process grants database and update the RRD database
+
+$RRDTOOL update $RRDDB `cat $GRANTS | $AWK -F: -vGRANTDATE=$GRANTDATE '
+BEGIN {
+	# Determine midnight - 1 sec timestamp of GRANTDATE
+	year=substr(GRANTDATE,1,4)
+	month=substr(GRANTDATE,5,2)
+	day=substr(GRANTDATE,7,2)
+        midnight = sprintf("%4.4d %2.2d %2.2d 23 59 59", year, month, day)
+        PERIOD_EPOCH = mktime(midnight)
+	# DEBUG: print "Date: ", GRANTDATE, " has timestamp= ", PERIOD_EPOCH
+
+        # Determine our timezone offset in seconds from UTC
+	tzstring = strftime("%z")
+        eastwest = substr(tzstring,1,1)
+        if (eastwest == "+") {tzsign = 1} else {tzsign = -1}
+        tzhours = substr(tzstring,2,2)
+        tzminutes = substr(tzstring,4,2)
+        tzoffset = tzsign*(tzhours*60 + tzminutes)*60
+}
+{
+	if ($0 ~ "^[ 	]*#") next	# Skip comment lines
+	if ($0 ~ "^[ 	]*$") next	# Skip blank lines
+	split($0,b,":")			# Split line into fields
+	grantname = b[1]		# Name of this grant 
+	grantgroup = b[2]		# Name of this grant group
+	grantgrouplist[grantgroup] = grantgroup	# List of grant group names
+	grantsponsor = b[3]		# Sponsor of this grant group (DCSC or LOCAL)
+	cpucores = b[6]			# Number of CPU cores for this grant group
+	diskspace = b[7]		# Diskspace (TB) for this grant group
+	grantstart = b[8]		# Start date of this grant (format DD/MM/YYYY)
+	grantend = b[9]			# Ending date of this grant (format DD/MM/YYYY)
+	# Convert dates to epoch times
+	split(grantstart,b,"/")		# Split date into fields
+	grantstartepoch = mktime(sprintf("%4.4d %2.2d %2.2d 00 00 00", b[3], b[2], b[1]))
+	split(grantend,b,"/")		# Split date into fields
+	grantendepoch =   mktime(sprintf("%4.4d %2.2d %2.2d 23 59 59", b[3], b[2], b[1]))
+	# DEBUG: print PERIOD_EPOCH, grantstart, grantstartepoch, grantend, grantendepoch
+
+	# If the PERIOD_EPOCH is inside this grant, then calculate the resources
+	if (PERIOD_EPOCH >= grantstartepoch && PERIOD_EPOCH <= grantendepoch) {
+		if (grantsponsor == "DCSC") groupcores_dcsc += cpucores
+		if (grantsponsor == "LOCAL") groupcores_local += cpucores
+		# DEBUG: print grantgroup, grantsponsor, cpucores
+	}
+} END {
+	# Timestamp for rrdtool should be at 23:59:59 on the given day.
+	# Add "tzoffset" to shift time to UTC which is REQUIRED for rrdtool.
+	rrdtimestamp = PERIOD_EPOCH + tzoffset
+	printf("%d:%d:%d\n", rrdtimestamp, groupcores_dcsc, groupcores_local)
+}' `

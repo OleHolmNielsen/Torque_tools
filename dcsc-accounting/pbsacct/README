@@ -1,0 +1,34 @@
+
+===================================
+PBS/Torque daily accounting scripts
+===================================
+
+The key tool is the script "pbsacctdcsc" which generates accounting data 
+in a format defined by DCSC, and which must be used as input for graphical
+presentations.
+
+Some path locations of files are configurable in the scripts, but the scripts
+have been configured with /var/spool/dcsc as the top-level directory where we
+keep databases, configurations etc.
+
+pbsacctdcsc script
+------------------
+
+Extracts Torque accounting data for a single day (corresponding to the Torque
+raw accounting file such as 20090120) and dumps it into a DCSC accounting database
+file such as 20090120.db located in /var/spool/dcsc/accounting.
+
+This DCSC accounting database file must be used as input for graphics tools
+displaying usage statistics.
+
+The output format is (colon separated):
+DCSC-center Installation-name Username Group Walltime(core-days) Today(epoch) Group-cores-DCSC Group-cores-local
+
+pbsjobs script
+--------------
+
+Raw Torque accounting data (located in /var/spool/torque/server_priv/accounting/)
+are processed by the "pbsjobs" script, which is part of Ole Holm Nielsen's
+simple Torque/PBS accounting package "pbsacct" available from 
+ftp://ftp.fysik.dtu.dk/pub/Torque/ .  Please obtain the latest "pbsjobs" script
+from that package.

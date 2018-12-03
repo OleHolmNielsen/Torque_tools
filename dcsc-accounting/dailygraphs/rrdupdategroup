@@ -1,0 +1,110 @@
+#!/bin/bash
+
+#
+# Update rrdtool group accounting database with data for a single day
+#
+# WARNING: The rrdtool database uses UTC time internally, but our accounting records
+# are made for calendar days in LOCAL TIME. Therefore:
+# DO NOT TRY to reprogram these scripts to use local time with rrdtool !!!
+# UTC time MUST be used for all daily graphs!
+#
+# Further information can be read in this rrdtool mailing list thread:
+# https://lists.oetiker.ch/pipermail/rrd-users/2009-February/015305.html
+#
+
+if test $# -ne 1
+then
+	echo Usage: $0 daily-accounting-file.db
+	exit -1
+fi
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+RRDTOOL=/usr/bin/rrdtool
+if test ! -x $RRDTOOL
+then
+	echo ERROR: RRDTOOL not found as $RRDTOOL
+	exit -1
+fi
+
+# A working file
+RRDTEMP=/tmp/pbsjobs.$$
+# Trap error signals:
+trap "rm -f ${RRDTEMP}; exit 2" 1 2 3 14 15 19
+
+# Location of the accounting database file
+DCSCACCTDB=$DCSCACCT/$1
+# Process daily accounting record
+cat $DCSCACCTDB | $AWK -F: -vRRDTOOL=$RRDTOOL -vDAILYGRAPHS=$DAILYGRAPHS '
+BEGIN {
+        # Determine our timezone offset in seconds from UTC
+	tzstring = strftime("%z")
+        eastwest = substr(tzstring,1,1)
+        if (eastwest == "+") {tzsign = 1} else {tzsign = -1}
+        tzhours = substr(tzstring,2,2)
+        tzminutes = substr(tzstring,4,2)
+        tzoffset = tzsign*(tzhours*60 + tzminutes)*60
+}
+{
+	grantgroup = $4
+	grantgroupnames[grantgroup] = grantgroup
+	wallnodedays[grantgroup] += $5
+
+	# Do sanity checks
+	# Check timestamp of accounting record
+	timeofday = strftime("%T",$6)
+	if (timeofday != "23:59:59") {
+		printf("Inconsistent accounting timestamp should be 23:59:59 but is %s\n",
+			strftime("%c",$6))
+		exit -1
+	}
+	if (PERIOD_EPOCH > 0 && PERIOD_EPOCH != $6) {
+		printf("Inconsistent accounting timestamp %d != %d\n", $6, PERIOD_EPOCH)
+		exit -1
+	}
+	# Set timestamp
+	PERIOD_EPOCH = $6
+
+	# Set group # of DCSC cores
+	if (groupcores_dcsc[grantgroup] > 0 && groupcores_dcsc[grantgroup] != $7) {
+		printf("Inconsistent data groupcores_dcsc[%s] != %d\n", grantgroup, $7)
+		 exit -1
+	}
+	groupcores_dcsc[grantgroup] = $7
+
+	# Set group # of local cores
+	if (groupcores_local[grantgroup] > 0 && groupcores_local[grantgroup] != $8) {
+		printf("Inconsistent data groupcores_local[%s] != %d\n", grantgroup, $8)
+		exit -1
+	}
+	groupcores_local[grantgroup] = $8
+} END {
+	# Timestamp calculation for rrdtool:
+	# Torque timestamp should be at 23:59:59 on given day, but we want
+	# 24:00:00 on that day for input to rrdtool, so we add 1 second.
+	# Also add "tzoffset" to shift time to UTC which is REQUIRED for rrdtool.
+	rrdtimestamp = PERIOD_EPOCH + 1 + tzoffset
+	for (grantgroup in grantgroupnames) {
+		# Print out RRD database name and values
+		printf("%s update %s/%s.daily.rrd %d:%f:%d:%d\n",
+			RRDTOOL, DAILYGRAPHS, grantgroupnames[grantgroup],
+			rrdtimestamp, wallnodedays[grantgroup],
+			groupcores_dcsc[grantgroup], groupcores_local[grantgroup])
+	}
+}' > ${RRDTEMP}
+
+# DEBUG:
+# Get list of all grant groups in daily record
+#cat $GRANTS | $AWK -F: '
+#/^[ 	]*#/{next}
+#/^[ 	]*$/{next}
+#{ print $2 }'
+
+# DEBUG: cat ${RRDTEMP}
+# Execute the rrdtool update commands
+. ${RRDTEMP}
+
+rm -f ${RRDTEMP}

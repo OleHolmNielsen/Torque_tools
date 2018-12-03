@@ -1,0 +1,199 @@
+#!/bin/bash
+
+# Summarize accounting information in $PBS/server_priv/accounting files.
+
+# Usage: cat <files> | pbsjobs [-S]
+# where <files> are daily record files (such as 200812?? for one month's files).
+
+# The format of Torque accounting records are defined on the page
+# http://www.clusterresources.com/torquedocs21/9.1accounting.shtml
+# For further details see src/include/acct.h:
+#define PBS_ACCT_QUEUE  (int)'Q'        /* Job Queued record */
+#define PBS_ACCT_RUN    (int)'S'        /* Job run (Started) */
+#define PBS_ACCT_RERUN  (int)'R'        /* Job Rerun record */
+#define PBS_ACCT_CHKPNT (int)'C'        /* Job Checkpointed and held */
+#define PBS_ACCT_RESTRT (int)'T'        /* Job resTart (from chkpnt) record */
+#define PBS_ACCT_END    (int)'E'        /* Job Ended/usage record */
+#define PBS_ACCT_DEL    (int)'D'        /* Job Deleted by request */
+#define PBS_ACCT_ABT    (int)'A'        /* Job Abort by server */
+
+# The -S (for "Single") should be used if you use the MAUI scheduler's single
+# job/task/user per node features NODEACCESSPOLICY=SINGLEUSER/SINGLEJOB/SINGLETASK
+# (see http://www.clusterresources.com/products/maui/docs/5.3nodeaccess.shtml).
+# Check your MAUI config by "showconfig | grep NODEACCESSPOLICY".
+# In this case a job is charged for the use of ALL PROCESSORS of a node.
+# Default: the actual number of processors used within each node.
+
+# Author: Ole.H.Nielsen@fysik.dtu.dk
+
+# The Single node option (default=0)
+SINGLE=0
+if test $# -eq 1
+then
+	if test "$1" = "-S"
+	then
+		SINGLE=1
+	else
+		echo "Usage: $0 [-S]"
+		exit -1
+	fi
+fi
+
+#
+# From the original pbsacct package:
+#
+# Configure this if necessary:
+# NODEFILE=/var/spool/torque/server_priv/nodes
+
+#
+# For the special DCSC accounting package only:
+#
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+NODEFILE=$TORQUEHOME/server_priv/nodes
+
+if test $SINGLE -eq 1
+then
+	if test ! -r $NODEFILE
+	then
+		echo $0 WARNING: The Torque nodes file $NODEFILE does not exist or is unreadable.
+		NODEFILE=""
+	fi
+fi
+
+# Process accounting records (item separator is semicolon)
+cat - | $AWK -F';' -vSINGLE=$SINGLE -vNODEFILE=$NODEFILE '
+BEGIN {
+	if (SINGLE == 1 && NODEFILE != "") {
+		# Get the node processor counts from the Torque nodes file
+		while ((getline < NODEFILE) > 0) {
+			split($0,items," ")	# Split the line with field separator=" "
+			nprocs = 1	# Default value = 1
+			# Item 2 may contain np=(number of CPUs in the node)
+        		if (match(items[2], "^np=")) nprocs = substr(items[2],4);
+			# Store the # of processors for each node
+			nodetotalprocs[items[1]] = nprocs
+			# DEBUG: printf(" Node %s np=%d\n", items[1], nprocs)
+		}
+		close(NODEFILE)
+	}
+}
+$2=="E"	{
+	# Process only "E" (ended: job completion) records.
+	enddatetime=$1
+	split($3,job,".")	# First part is the jobid (skip domain part)
+	jobid=job[1]
+	delete job		# Cleanup
+	nodect = 1		# Default node-count is 1
+	total_ncpus = 0		# Counting the used total number of CPUs (=processors or cores)
+
+	# The $4 field contains the accounting data
+	ndata = split($4,data," ")
+	# Extract desired values from the rest of the record:
+	for (i=1; i<= ndata; i++) {
+
+		if (match(data[i], "^user="))
+			user =		substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^group="))
+			group =		substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^jobname="))
+			jobname =	substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^queue="))
+			queue =		substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^ctime="))
+			ctime =		substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^qtime="))
+			qtime =		substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^etime="))
+			etime =		substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^start="))
+			start =		substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^exec_host=")) {
+			exec_host =	substr(data[i],RSTART+RLENGTH);
+			# The actual node names and processors used are in "exec_host" (separated by "+")
+			# Count the number of processors (CPUs,cores) as the # of items in exec_host:
+			total_ncpus = split(exec_host,processornames,"+")
+			if (SINGLE == 1) {
+				# For the SINGLE option we must charge for ALL processors in each node.
+				# DEBUG: print "exec_host = ", exec_host
+				for (p=1; p<=total_ncpus; p++) { 
+					# Extract the nodename
+					slash = index (processornames[p],"/")
+					nodename = substr(processornames[p],1,slash-1)
+					# DEBUG: printf("%s+", nodename)
+					# Increment the # of processors on this node
+					nodeproc[nodename] += 1
+				}
+				# DEBUG: for (n in nodeproc) printf("%s:%d(%d)+", n, nodeproc[n], nodetotalprocs[n])
+				total_ncpus = 0
+				for (n in nodeproc) {
+					# Calculate # of processors on this node.
+					# If this node exists in the Torque server "nodes" file, then charge for ALL processors
+					# (it may be that the node has been deleted from the nodes file after the accounting
+					# record was made - if the system was changed after the record was made...).
+					if (nodetotalprocs[n] > 0)
+						total_ncpus += nodetotalprocs[n]
+					else
+						total_ncpus += nodeproc[n]	# Default: actual # of processors used
+				}
+				# DEBUG: print "total_ncpus=", total_ncpus
+				delete nodeproc		# Cleanup required
+			}
+		} else if (match(data[i], "^end="))
+			end =		substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^Exit_status="))
+			status =	substr(data[i],RSTART+RLENGTH);
+
+		# The Resource_List items
+		else if (match(data[i], "^Resource_List.nodect="))
+			nodect = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^Resource_List.walltime="))
+			wallres = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^Resource_List.nodes="))
+			nodes = substr(data[i],RSTART+RLENGTH);
+
+		# The resources_used items
+		else if (match(data[i], "^resources_used.cput="))
+			cput =	substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^resources_used.vmem="))
+			vmem =	substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^resources_used.mem="))
+			mem =	substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^resources_used.walltime="))
+			wall =	substr(data[i],RSTART+RLENGTH);
+
+	}
+
+	delete data		# Cleanup
+	# Extract total CPU-time and wallclock-time
+	split(cput,hms,":")
+	cpusecs = hms[1]*3600 + hms[2]*60 + hms[3]
+	split(wall,hms,":")
+	wallsecs = hms[1]*3600 + hms[2]*60 + hms[3]
+	delete hms		# Cleanup
+
+	# Sanity checks of times
+	# Bug workaround: sometimes Torque/PBSPro reports a crazy walltime
+	if (wallsecs > end - start) wallsecs = end - start
+	# Calculate wait-time
+	if (etime > 0)
+		waittime = start - etime	# Time spent waiting to run
+	else
+		waittime = start - qtime	# Use qtime if etime==0
+
+	# Output desired accounting fields.
+	# Format:
+	#   Job-id Username Groupname Queuename Nodecount CPU-seconds Ending-date-time
+	#   Starting-epoch-second Ending-epoch-sec
+	#   Wall-clock-seconds Virtual-memory Waiting-seconds Total-number-CPUs
+
+	# (Ignore all jobs with wallsecs==0)
+	if (wallsecs > 0) 
+		printf("%7s %8s %8s %s %3s %8s %s %d %d %8s %s %s %s %s\n",
+			jobid, user, group, queue, nodect, cpusecs, enddatetime, 
+			start, end,
+			wallsecs, vmem, waittime, total_ncpus, status)
+}
+'

@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Create rrdtool database for all DCSC grant groups
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# Get list of all grant groups in daily record
+ALLGROUPS=`cat $GRANTS | $AWK -F: '
+/^[    ]*#/{next}
+/^[    ]*$/{next}
+{print $2}' | sort | uniq`
+
+# Create databases for all groups, plus the NOGROUP catch-all
+for group in $ALLGROUPS NOGROUP
+do
+	$BINDIR/rrdcreategroup $group
+done

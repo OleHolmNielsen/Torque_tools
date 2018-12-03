@@ -1,0 +1,45 @@
+
+Version 1.5
+-----------
+pbsacctdcsc: Added output for ALL grant groups, even if usage==0.  This is needed
+       for graphs of DCSC/Local cores to be continuous.
+
+Version 1.3
+-----------
+pbsacctdcsc: Added check for missing UNIX group (assign to group NOGROUP)
+pbsacctdcsc.load: New script to create database records from old Torque 
+       accounting files.
+All scripts: Changed /bin/sh to /bin/bash for compatibility with UNIX systems
+
+Version 1.2
+-----------
+pbsjobs: Incorrect processing of the Torque nodes file fixed.
+
+Version 1.1
+-----------
+pbsacctdcsc: Added check of midnight timestamp.
+       Added MAUI_NODEACCESSPOLICY flags to call pbsjobs with Single node 
+       accounting.
+       Sanity check of MAUI_NODEACCESSPOLICY against current MAUI config.
+pbsacctdcsc.cron2: New script to be run from cron AFTER midnight
+       so that we avoid the "sleep" in pbsacctdcsc.cron.
+       The INSTALL documentation was updated accordingly.
+pbsjobs: Introduced an optional argument -S (for "Single").
+       This should be used if you use the MAUI scheduler's single
+       job/task/user per node features SINGLEUSER/SINGLEJOB/SINGLETASK,
+       http://www.clusterresources.com/products/maui/docs/5.3nodeaccess.shtml.
+       In this case a job is charged for the use of an ENTIRE NODE in stead of
+       the default, which is the actual number of processors used within each
+       node. Requested by Niels Carl Hansen.
+       We get the node's #CPU cores from the Torque "nodes" file.
+       One caveat is required: If the system was changed after the accounting
+       record was made, a nodename may have disappeared from the "nodes"
+       file, and hence we have lost all memory of this node's #CPU cores.
+       In this case we only account for the actual #CPU cores used.
+       Therefore the accounting script should NOT be rerun after changes have
+       been made to the nodes in the system, or inaccuracies will occur !
+
+
+Version 1.0
+-----------
+Initial release January 23, 2009 by Ole Holm Nielsen, DCSC/DTU

@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Create rrdtool database for combined grants on the system
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# The system grants RRD database
+RRDDB=$DAILYGRAPHS/systemgrants.daily.rrd
+
+if test -r $RRDDB
+then
+	echo Error: RRD database file $RRDDB already exists
+	exit 1
+fi
+
+RRDTOOL=/usr/bin/rrdtool
+if test ! -x $RRDTOOL
+then
+	echo ERROR: RRDTOOL not found as $RRDTOOL
+	exit -1
+fi
+
+# Define the earliest possible time (01/01 2002 at 00:00:00 in current timezone):
+# STARTTIME=`echo | $AWK '{print mktime("2002 01 01 00 00 00")}'`
+STARTTIME=`$DATE -ud 2002-01-01\ 00:00 +%s`
+# The time step is 1 day (86400 seconds)
+STEPTIME=86400
+# Heartbeat
+HEARTBEAT=$[$STEPTIME*2]
+
+# The database contains:
+# * DCSC cores in all grants combined: dcsc
+# * LOCAL cores in all grants combined: local
+# * Daily average (1 days)
+
+# Create the database
+echo Creating rrdtool database $RRDDB starting at $STARTTIME with step $STEPTIME
+$RRDTOOL create $RRDDB \
+	--start $STARTTIME --step $STEPTIME \
+	DS:dcsc:GAUGE:$HEARTBEAT:0:U \
+	DS:local:GAUGE:$HEARTBEAT:0:U \
+	RRA:AVERAGE:0.5:1:3650 \
+	RRA:AVERAGE:0.5:7:500 \
+
+#
+# Load old grant data into the RRD database
+#
+echo Loading old grant data into the RRD database
+
+# Go the the Torque accounting directory and use the accounting filenames
+# as date specifications for the list of grants dates.
+# Any other way for generating a list of dates would be equally good.
+cd $TORQUEACCTDIR
+for i in 20??????
+do
+	echo Grant date $i
+        $BINDIR/rrdupdategrants $i
+done

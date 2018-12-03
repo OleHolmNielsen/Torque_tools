@@ -1,0 +1,125 @@
+#!/bin/bash
+
+# Create rrdtool graph for a single RRD database
+
+if test $# -ne 1
+then
+	echo Usage: $0 RRD-database
+	exit -1
+fi
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# Go to the RRD database directory
+cd $DAILYGRAPHS
+
+# The database (arg# 1)
+# RRDDB=$DAILYGRAPHS/$1
+RRDDB=$1
+
+# Grant group name
+GRANTGROUP=`basename $RRDDB .daily.rrd`
+
+RRDTOOL=/usr/bin/rrdtool
+if test ! -x $RRDTOOL
+then
+	echo ERROR: RRDTOOL not found as $RRDTOOL
+	exit -1
+fi
+
+# Get the last datapoint in the RRD database
+# Contents:  N:$running:$DCSC_cores:$local_cores
+lastupdate=`$RRDTOOL lastupdate $RRDDB | tail -1`
+
+# Today's date
+TODAY=`$DATE +%d-%b-%Y`
+# Graph title
+TITLE="$DCSC_SITE - $MACHINE - $GRANTGROUP - $TODAY"
+YLABEL="Cores"
+# Colour definitions
+colour_running="#009900"
+colour_dcsc="#0000FF"
+colour_total="#000000"
+# Legend definitions (no legend iz value==0)
+running="`echo $lastupdate | $AWK '{print int($2)}'`"
+text_running="Usage=${running}"
+dcsc="`echo $lastupdate | $AWK '{print int($3)}'`"
+if test $dcsc -gt 0
+then
+	text_dcsc="DCSC grant=${dcsc}"
+fi
+total="`echo $lastupdate | $AWK '{print int($4)}'`"
+if test $total -gt 0
+then
+	text_total="+Local=${total}"
+fi
+
+# Calculate today's date at 00:00 where yesterday's accounting ends:
+# Use mktime/strftime to recalculate the date.
+last=`$DATE +%m/%d/%Y | $AWK -F/ '{print strftime("%s",mktime(sprintf("%4.4d %2.2d %2.2d 00 00 00", $3, $1, $2)))}'`
+
+function makegraph () {
+	# Usage: makegraph graphfile starttime
+	graphfile=$1
+	starttime=$2
+	options=$3
+
+	#
+	# If any group has an average usage of 0 then skip the graph (configurable)
+	#
+	if test $SKIPZEROGRAPH -gt 0
+	then
+		# Get the average value for this period
+		average=`$RRDTOOL fetch $RRDDB --end $last --start $starttime AVERAGE | $AWK '
+		NR>2 {
+			if ($2 == "nan") next
+			runningavg += $2
+			num++
+		} END {
+			if (num > 0)
+				print int(runningavg / num)
+			else
+				print 0
+		}'`
+		if test $average -le 0
+		then
+			echo Average value $average - skipped
+			rm -f $graphfile
+			return
+		fi
+	fi
+
+	# Graph definitions:
+	# "running" is the # of running cores (AREA colors the area below the curve)
+	# "dcsc" is the # of DCSC cores, drawn as a LINE2 (2-pixels line)
+	# "dcsc_nonzero", if > 0, is the #DCSC cores, and UNKNOWN (invisible) otherwise
+	# "local" is the #Local cores
+	# "local_nonzero", if > 0, is the #Local cores, and UNKNOWN (invisible) otherwise
+
+	TZ="UTC" $RRDTOOL graph $graphfile --title "$TITLE" \
+		--vertical-label $YLABEL --lower-limit 0 $options \
+		--end $last --start $starttime \
+		DEF:running=$RRDDB:running:AVERAGE \
+		AREA:running$colour_running:"$text_running" \
+		DEF:dcsc=$RRDDB:DCSC:AVERAGE \
+		CDEF:dcsc_nonzero=dcsc,dcsc,UNKN,IF \
+		DEF:local=$RRDDB:LOCAL:AVERAGE \
+		CDEF:local_nonzero=local,local,UNKN,IF \
+		LINE2:dcsc_nonzero$colour_dcsc:"$text_dcsc" \
+		LINE2:local_nonzero$colour_total:"$text_total":STACK
+}
+
+# Specify explicit time intervals:
+# lastweek=$[$last-604800]
+# lastmonth=$[$last-2678400]
+# lastyear=$[$last-31536000]
+
+makegraph $WWWDIR/${MACHINE}_$GRANTGROUP.weekly.png end-1w "--x-grid HOUR:24:DAY:1:DAY:1:86400:%a.%d"
+makegraph $WWWDIR/${MACHINE}_$GRANTGROUP.monthly.png end-1m "--x-grid DAY:1:WEEK:1:WEEK:1:0:%b.%d"
+makegraph $WWWDIR/${MACHINE}_$GRANTGROUP.yearly.png end-1y
+
+# For documentation of the --x-grid option see http://oss.oetiker.ch/rrdtool/doc/rrdgraph.en.html
+# and "man strftime" for the %-format specifications at the end of --x-grid.

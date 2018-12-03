@@ -1,0 +1,83 @@
+
+Installation
+============
+
+Prerequisites for non-Linux installations (AIX etc.):
+BASH 3.2.33 has been tested to work with our scripts.
+GNU awk (gawk) is required (path to gawk is configured in the "config" file).
+
+Install the RRDTOOL software, see instructions in dailygraphs/INSTALL.
+
+Basic installation steps
+------------------------
+
+1. Edit these files for your local system: config site unixgroups grants.
+If you want to account for entire nodes (in stead of CPU cores used),
+edit the "config" file so that MAUI_NODEACCESSPOLICY is the same as your 
+MAUI configuration (pbsacctdcsc will check for consistency).
+
+2. Install files and scripts using this script:
+   ./install.sh
+
+Group accounting installation steps
+-----------------------------------
+
+3. Create RRDTOOL databases for group accounting:
+   # rrdcreategroupall
+
+4. Create database records for old Torque accounting files:
+   # pbsacctdcsc.load
+This can take several minutes.
+To initialize the RRD databases, load the old accounting database records:
+   # rrdloadold
+
+5. Run the daily RRD database update script once as a test:
+   # /usr/local/bin/pbsacctdcsc.cron2
+and then make a daily crontab job right AFTER midnight (for the previous day):
+   15 0 * * * /usr/local/bin/pbsacctdcsc.cron2
+
+6. Create group statistics graphs:
+   # rrdgraphgroupall
+and then make a daily crontab job after the above crontab job:
+   20 0 * * * /usr/local/bin/rrdupdategroup.cron
+The graph files will be created in the WWWDIR (see the "config" file).
+
+System accounting installation steps
+------------------------------------
+
+7. Create RRDTOOL database for system accounting:
+   # rrdcreatesystem
+Create RRDTOOL database for DCSC grants:
+   # rrdcreategrants
+
+8. Edit the load data update script "rrdupdatesystem":
+If your batch system uses the MAUI/Moab scheduler, we supply lines for the
+MAUI scheduler using the "showq" command to extract system load data. 
+Similar script lines are currently needed for the IBM LoadLeveler and the
+SUN Grid Engine (please send your contribution back to Ole.H.Nielsen@fysik.dtu.dk).
+
+9. Run the load data update script:
+   # rrdupdatesystem
+Update the system load statistics and graphs every 5 minutes from "cron":
+   */5 * * * * /usr/local/bin/rrdupdatesystem.cron
+Also update the DCSC grants RRD database on a daily basis from "cron":
+   10 0 * * * /usr/local/bin/rrdupdategrants.cron
+The graph files will be created in the WWWDIR (see the "config" file).
+
+WWW-server installation steps
+-----------------------------
+
+10. Now that statistics and graphing works correctly, you may want to 
+change WWWDIR in the "config" file so that it points to a place on
+your web server where the data can be presented to the Internet.
+
+11. Decide which WWW-server you want to use to display the installation graphs.
+Make sure that the above mentioned WWWDIR is available on the WWW-server, for
+example by NFS-mounting or by remote copying:
+   # rsync -av --delete $WWWDIR/ remoteserver:/some/dir/WWW/
+
+12. In the subdirectory WWW we have collected some scripts that have been
+tested with an Apache WWW-server.  The directory index file "index.pl" 
+is used to generate HTML-pages using a Perl CGI method.  You must configure
+your Apache server to allow generation of Perl CGI pages, please see the
+example file "httpd.conf".  The file ".htaccess" must be copied to the WWWDIR.

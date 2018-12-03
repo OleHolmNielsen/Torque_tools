@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# This script should be run every day from cron shortly AFTER midnight,
+# processing the Torque daily accounting record for the PREVIOUS day.
+#  A typical crontab entry would be:
+# 15 1 * * * /usr/local/bin/pbsacctdcsc.cron2
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+#
+# Calculate the name of the Torque accounting file from yesterday's date:
+#
+TODAY=`$DATE +%m/%d/%Y`
+# Yesterday's date: Subtract 1 from the day of the month,
+# use mktime/strftime to recalculate the date.
+YESTERDAY=`echo $TODAY | $AWK -F/ '{print strftime("%Y%m%d",mktime(sprintf("%4.4d %2.2d %2.2d 23 59 59", $3, $1, $2 - 1)))}'`
+# DEBUG echo Yesterday=$YESTERDAY
+
+#
+# Now generate yesterday's daily accounting DCSC database record
+#
+$BINDIR/pbsacctdcsc $YESTERDAY

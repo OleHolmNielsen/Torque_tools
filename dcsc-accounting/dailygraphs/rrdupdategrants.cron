@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Grants RRD database: Update the RRD database with today's grant data
+
+# This script should be run every day from cron shortly after midnight,
+# A typical crontab entry would be:
+# 20 1 * * * /usr/local/bin/rrdupdategrants.cron
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# Update the RRD database with today's grant data
+TODAY=`date +%Y%m%d`
+# DEBUG: echo Update grants RRD database for date $TODAY
+$BINDIR/rrdupdategrants $TODAY.db

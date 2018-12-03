@@ -1,0 +1,96 @@
+#
+# Global configuration of ile locations for DCSC Torque accounting
+# (the $DCSCDIR variable MUST be defined in the calling scripts).
+#
+
+#
+# CONFIGURE the settings below to suit your installation:
+#
+# Location of scripts and commands
+BINDIR=/usr/local/bin
+AWK=/bin/gawk
+DATE=/bin/date
+# AIX: Use commands in /opt/freeware/bin/ from Linux toolbox.
+# See http://www-03.ibm.com/systems/power/software/aix/linux/
+# AWK=/opt/freeware/bin/gawk
+# DATE=/opt/freeware/bin/date
+
+# Torque homedir
+TORQUEHOME=/var/spool/torque
+# Torque accounting directory
+TORQUEACCTDIR=$TORQUEHOME/server_priv/accounting
+# MAUI queue status command "showq"
+SHOWQ=$BINDIR/showq
+
+# File describing mapping of UNIX groups to DCSC grantholder groups
+UNIXGROUPS=$DCSCDIR/unixgroups
+# File defining the name of this site
+SITE=$DCSCDIR/site
+# Database (flat file) defining all DCSC grants
+GRANTS=$DCSCDIR/grants
+# Cache directory for DCSC accounting records
+DCSCACCT=$DCSCDIR/accounting
+# Cache directory for daily rrdtool accounting databases
+DAILYGRAPHS=$DCSCDIR/dailygraphs
+# WWW-directory where graph images are stored (temporary setting)
+WWWDIR=$DAILYGRAPHS
+# Skip graphs with only zeroes in rrdgraphgroup (default=0 means "Off")
+SKIPZEROGRAPH=0
+
+#
+# OPTIONAL: Accounting for entire nodes in stead of only the CPU cores used.
+#
+# Assuming the MAUI scheduler, this should be used if you use the MAUI scheduler's single
+# job/task/user per node features NODEACCESSPOLICY=SINGLEUSER/SINGLEJOB/SINGLETASK
+# (see http://www.clusterresources.com/products/maui/docs/5.3nodeaccess.shtml).
+# Check your MAUI config by "showconfig | grep NODEACCESSPOLICY".
+# In this case a job is charged for the use of ALL PROCESSORS of a node.
+# Default: the actual number of processors used within each node (NODEACCESSPOLICY=SHARED).
+MAUI_NODEACCESSPOLICY=SHARED
+# Alternative:
+# MAUI_NODEACCESSPOLICY=SINGLEJOB
+
+#
+# Sanity checks
+#
+
+# DCSCDIR is inherited from the calling script
+if test ! -d $DCSCDIR
+then
+	echo Error: DCSC accounting directory $DCSCDIR does not exist
+	exit 1
+fi
+
+if test ! -f $UNIXGROUPS
+then
+	echo Error: DCSC UNIX-groups file $UNIXGROUPS does not exist
+	exit 1
+fi
+
+if test ! -f $SITE
+then
+	echo Error: DCSC site file $SITE does not exist
+	exit 1
+fi
+
+if test ! -f $GRANTS
+then
+	echo Error: DCSC grants database $GRANTS does not exist
+	exit 1
+fi
+
+if test ! -d $DCSCACCT
+then
+	echo Error: DCSC accounting directory $DCSCACCT does not exist
+	exit 1
+fi
+
+if test ! -d $DAILYGRAPHS
+then
+	echo Error: DCSC accounting directory $DAILYGRAPHS does not exist
+	exit 1
+fi
+
+# Execute the site parameter setup:
+# Define the name and machine of this DCSC installation
+. $SITE

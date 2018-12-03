@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# Utility for printing an epoch time (seconds since 1970) in a readable format.
+# Print both in the current timezone and UTC (used internally by RRDTOOL).
+#
+# Usage: epoch2time epochtime
+
+echo $1 | gawk '{print strftime("%c",$1)}'
+echo $1 | TZ="UTC" gawk '{print strftime("%c",$1)}'

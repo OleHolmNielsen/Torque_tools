@@ -1,0 +1,89 @@
+#!/bin/bash
+
+# Create rrdtool graphs for the system load RRD database.
+# Graphs from various periods until the last data point are displayed.
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+# Go to the RRD database directory
+cd $DAILYGRAPHS
+
+# The RRD database 
+RRDDB=system.rrd
+# The system grants RRD database (dcsc cores and local cores)
+GRANTSRRDDB=systemgrants.daily.rrd
+
+RRDTOOL=/usr/bin/rrdtool
+if test ! -x $RRDTOOL
+then
+	echo ERROR: RRDTOOL not found as $RRDTOOL
+	exit -1
+fi
+
+# Timestamp of last entry in the RRD database
+last=`$RRDTOOL last $RRDDB`
+# Get the last datapoint in the RRD database
+# Contents:  N:$running:$total:$DCSC_cores:$pending:$hold
+lastupdate=`$RRDTOOL lastupdate $RRDDB | tail -1`
+
+# Today's date
+TODAY=`$DATE +%d-%b-%Y`
+# Graph title
+TITLE="$DCSC_SITE - $MACHINE - $TODAY"
+YLABEL="Cores"
+# Colour definitions
+colour_running="#009900"
+colour_pending="#FFFF00"
+colour_hold="#FF0000"
+colour_dcsc="#0000FF"
+colour_total="#000000"
+# Legend definitions
+text_running="Running=`echo $lastupdate | $AWK '{print $2}'`"
+text_pending="Pending=`echo $lastupdate | $AWK '{print $5}'`"
+text_hold="Hold=`echo $lastupdate | $AWK '{print $6}'`"
+text_dcsc="DCSC Cores=`echo $lastupdate | $AWK '{print $4}'`"
+text_total="Total available cores=`echo $lastupdate | $AWK '{print $3}'`"
+text_totalqueue="(Sum=`echo $lastupdate | $AWK '{print $2+$5+$6}'`"
+
+function makegraph () {
+	# Usage: makegraph graphfile starttime
+	graphfile=$1
+	starttime=$2
+	options=$3
+	# Time step size 5min=300sec
+	STEP=300
+	# Graph definitions:
+	# "running" is the # of running cores (AREA colors the area below the curve)
+	# "pending" is the # of pending job cores
+	# "hold" is the # of hold job cores
+	# "dcsc" is the # of DCSC cores, drawn as a LINE2 (2-pixels line),
+	#    the "dcsc" is read from the "systemgrants" RRD database.
+	# "total" is the total available cores, drawn as a LINE2 (2-pixels line)
+
+	$RRDTOOL graph $graphfile --title "$TITLE" \
+		--vertical-label $YLABEL --lower-limit 0 $options \
+		--end $last --start $starttime --step $STEP \
+		DEF:running=$RRDDB:running:AVERAGE \
+		AREA:running$colour_running:"$text_running" \
+		DEF:pending=$RRDDB:pending:AVERAGE \
+		AREA:pending$colour_pending:"$text_pending":STACK \
+		DEF:hold=$RRDDB:hold:AVERAGE \
+		AREA:hold$colour_hold:"$text_hold":STACK \
+		COMMENT:"$text_totalqueue" \
+		DEF:total=$RRDDB:total:AVERAGE \
+		LINE2:total$colour_total:"$text_total" \
+		DEF:dcsc=$GRANTSRRDDB:dcsc:AVERAGE \
+		LINE2:dcsc$colour_dcsc:"$text_dcsc" > /dev/null
+}
+
+makegraph $WWWDIR/${MACHINE}_system.hourly.png end-1h
+makegraph $WWWDIR/${MACHINE}_system.daily.png end-1d "--x-grid MINUTE:60:HOUR:1:HOUR:4:0:%H:%M"
+makegraph $WWWDIR/${MACHINE}_system.weekly.png end-7d "--x-grid HOUR:24:DAY:1:DAY:1:86400:%a.%d"
+makegraph $WWWDIR/${MACHINE}_system.monthly.png end-31d "--x-grid DAY:1:WEEK:1:WEEK:1:2678400:%b.%d"
+makegraph $WWWDIR/${MACHINE}_system.yearly.png end-1yr
+
+# For documentation of the --x-grid option see http://oss.oetiker.ch/rrdtool/doc/rrdgraph.en.html
+# and "man strftime" for the %-format specifications at the end of --x-grid.

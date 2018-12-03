@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Create rrdtool database for system utilization
+
+# DCSC top-level directory
+DCSCDIR=/var/spool/dcsc
+# Define file locations at this site
+. $DCSCDIR/config
+
+RRDDB=$DAILYGRAPHS/system.rrd
+if test -r $RRDDB
+then
+	echo Error: RRD database file $RRDDB already exists
+	exit 1
+fi
+
+RRDTOOL=/usr/bin/rrdtool
+if test ! -x $RRDTOOL
+then
+	echo ERROR: RRDTOOL not found as $RRDTOOL
+	exit -1
+fi
+
+# Define the earliest possible time (01/01 2002):
+STARTTIME=`$AWK 'BEGIN {print mktime("2002 01 01 00 00 00")}'`
+# The time step is 5 minutes (300 seconds)
+STEPTIME=300
+# Heartbeat
+HEARTBEAT=$[$STEPTIME*2]
+
+# The database contains:
+# * running cores
+# * total cores available
+# * DCSC cores available
+# * pending cores
+# * hold cores (jobs blocked)
+# RRA: 12*5 min (1h), keep 24h
+# RRA: 12*5 min (1h), keep 168h = 1week
+# RRA: 288*5 min (24h), keep 31d = 1month
+# RRA: 288*5 min (24h), keep 3650d = 10years
+
+# Create the database
+echo Creating rrdtool database $RRDDB
+$RRDTOOL create $RRDDB \
+	--start $STARTTIME --step $STEPTIME \
+	DS:running:GAUGE:$HEARTBEAT:0:U \
+	DS:total:GAUGE:$HEARTBEAT:0:U \
+	DS:dcsc:GAUGE:$HEARTBEAT:0:U \
+	DS:pending:GAUGE:$HEARTBEAT:0:U \
+	DS:hold:GAUGE:$HEARTBEAT:0:U \
+	RRA:AVERAGE:0.5:12:24 \
+	RRA:AVERAGE:0.5:12:168 \
+	RRA:AVERAGE:0.5:288:31 \
+	RRA:AVERAGE:0.5:288:3650 \
