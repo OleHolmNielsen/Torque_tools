@@ -1,0 +1,122 @@
+Version 1.4.11
+--------------
+
+pbsjobs: Fixed error found with some Torque versions: The job start time "start=0" is a bug.
+Try to calculate a sensible wait-time despite this.
+
+pbsacct: User accounting generalized: A user may now belong to several groups.
+Usage in each group will be accounted separately.
+
+pbsacct: Sanity check for empty accounting file.
+
+Defining AWK=/bin/gawk in several scripts allows setting your system's awk version.
+
+Version 1.4.9
+-------------
+
+Fixed missing $ character in pbsacct.
+Thanks to "Passerone, Daniele" <Daniele.Passerone@empa.ch>.
+
+Version 1.4.8
+-------------
+
+pbsjobs:
+	Added check for negative waittime because PBSPro may give starttime=0 for job arrays
+	(thanks to Alexis Quentin <quentin@iap.fr>).
+
+Version 1.4.7
+-------------
+
+pbsjobs:
+	Introduced TORQUEHOME variable (thanks to kong.lists@gmail.com)
+pbsnodect:
+	Added a comment about counting of days when timezone goes to/from DST,
+	this may for example cause October to be counted as 32 days.
+	A better solution would be to count fractional days due to DST transitions.
+pbsacct:
+	Fixed missing $ in front of MAUI_NODEACCESSPOLICY variable.
+
+Version 1.4.6
+-------------
+
+pbsjobhist:
+        NEW SCRIPT: Produce a Torque/PBS job history from the accounting records.
+        This may be useful for tracking job histories of individual jobs, or
+        those jobs belonging to specific users and groups.
+        Usage:
+           cat [accounting-files] | pbsjobhist
+        Accounting files are usually in /var/spool/torque/server_priv/accounting/.
+        Please make sure that the accounting-files covers the entire period that you're
+        interested in, since some jobs will usually fall outside this period.
+        Output: One line per job containing:
+           job-id username group list-of-event-timestamps
+        The job events are mainly: Q (queued), S (started), E (ended).  Additional
+        event types are listed in the script. If available, the CPU-time, Wallclock-time
+        and Queue-wait-time are printed.
+pbsacct:
+        * Fixed wrong column used in the sort command (now uses SORTCOLUMN).
+        * Introduced a variable MAUI_NODEACCESSPOLICY with default value "SHARED"
+        for those sites that account by entire nodes in stead of CPU cores used,
+        see the explanation under pbsjobs below.
+        * Make a check for zero accounting lines in input files.
+pbsreportmonth:
+        Configure SUBSCRIBERS and SYSTEMNAME for your local environment.
+pbsnodect:
+        * Calculate number of days from first to last job.
+        Previously we just counted the number of accounting files, but on
+        systems with very few jobs there may be gaps in the daily accounting
+        files.
+        * Assume a default np=1 in the Torque nodes file if np= is absent.
+        * Introduced a variable MAUI_NODEACCESSPOLICY with default value "SHARED"
+        for those sites that account by entire nodes in stead of CPU cores used,
+        see the explanation under pbsjobs below.
+        * Make a check for zero accounting lines in input files.
+pbsjobs: 
+       * Calculate number of CPU cores used from the exec_host record, in stead of
+       the Resource_List.nodes used previously.
+       * Introduced an optional argument -S (for "Single").
+       This should be used if you use the MAUI scheduler's single
+       job/task/user per node features SINGLEUSER/SINGLEJOB/SINGLETASK, see
+       http://www.clusterresources.com/products/maui/docs/5.3nodeaccess.shtml.
+       In this case a job is charged for the use of an ENTIRE NODE in stead of
+       the default, which is the actual number of processors used within each
+       node. Requested by Niels Carl Hansen <recnh@cscaa.dk>.
+       We get the node's #CPU cores from the Torque "nodes" file.
+       NOTE: One caveat is required: If the system was changed after the accounting
+       record was made, a nodename may have disappeared from the "nodes"
+       file, and hence we have lost all memory of this node's #CPU cores.
+       In this case we only account for the actual #CPU cores used.
+       Therefore the accounting script should NOT be rerun after changes have
+       been made to the nodes in the system, otherwise the results may become
+       inaccurate !
+       * Make a check for pbs_server logfiles in stead of accounting files.
+
+
+Version 1.4.5
+-------------
+pbsnodect:
+        * Added calculation of NUM_CPUS from the Torque nodes file.
+        * Now reports the number of CPU cores (processors) in stead of nodes.
+pbsjobs:
+        * Added job start and end times (in epoch seconds since 1970) to output of "pbsjobs".
+         Some functions are easier to implement when times are given in epoch seconds.
+         The pbsacct and pbsnodect were changed to read start and end from pbsjobs.
+pbsacct and pbsnodect:
+        * Report first and last job from the actual accounting records,
+         in stead of using just the name of the accounting files.
+
+Version 1.4.4
+-------------
+pbsacct:
+        * Fixed a group accounting bug in "pbsacct -G" when a group has the same name as some user.
+pbsacct:
+        * Changed the argument to the "sort" command in pbsacct to comply with more modern syntax.
+pbsacct:
+        * Fixed syntax of a "test" command in pbsacct to comply with more modern syntax.
+         Thanks to Chris Vaughan <chris@clusterresources.com>
+
+Version 1.4.3
+-------------
+pbsacct:
+        * Added the flag -G to pbsacct so that a summary of group accounting data is printed.
+        * The command pbsacctgroup is replaced by pbsacct -G

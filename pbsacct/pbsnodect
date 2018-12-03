@@ -1,0 +1,166 @@
+#!/bin/sh
+
+# Summarize NODE accounting information from PBS accounting files
+# located in $PBSHOME/server_priv/accounting/
+
+# The accompanying script "pbsjobs" extracts simplified records
+# of completed jobs.
+
+# Usage: pbsnodect <accounting-files>
+# where <accounting-files> are daily PBS records (such as 20000705)
+# Author:	Ole.H.Nielsen@fysik.dtu.dk
+# Thanks to:	Miroslaw.Prywata@fuw.edu.pl
+
+#---------------------------------------------------------------
+
+# Configure this if necessary:
+BINDIR=/usr/local/bin
+AWK=/bin/gawk
+TORQUEHOME=/var/spool/torque
+MAUI_NODEACCESSPOLICY="SHARED"
+
+if [ -z "$1" ] ; then
+	echo "Usage: $0 accounting-files";
+	exit 1
+fi
+
+# Verify that the MAUI_NODEACCESSPOLICY is consistent with current MAUI config
+SHOWCONFIG=$BINDIR/showconfig
+if test -x $SHOWCONFIG
+then
+	NODEACCESSPOLICY=`$SHOWCONFIG | grep NODEACCESSPOLICY | $AWK '{print $2}'`
+	if test "$MAUI_NODEACCESSPOLICY" != "$NODEACCESSPOLICY"
+	then
+		echo ERROR: Inconsistent MAUI NODEACCESSPOLICY:
+		echo $MAUI_NODEACCESSPOLICY is not = $NODEACCESSPOLICY
+		exit 1		# We decide to bail out here (may be omitted)
+	fi
+fi
+
+# Accounting for entire nodes in stead of #CPU cores used.
+if test "$MAUI_NODEACCESSPOLICY" = "SHARED"
+then
+	# Case of shared nodes
+	SINGLE=""
+else
+	# Case where entire nodes are reserved
+	SINGLE="-S"
+fi
+
+# Accounting-files:
+ACCT_FILES=$*
+NUM_FILES=$#
+# Sanity check
+for f in ${ACCT_FILES}
+do
+	if [ ! -r $f ]
+	then
+		echo ERROR: File $f is unreadable:
+		ls -la $f
+		exit 1
+	fi
+done
+
+# The pbsjobs accounting-information extractor script:
+# May be set by an environment variable.
+if [ -z "${PBSJOBS}" ] ; then
+	PBSJOBS="${BINDIR}/pbsjobs";
+fi
+
+# A working file
+JOBTEMP=/tmp/pbsjobs.$$
+# Trap error signals:
+trap "rm -f ${JOBTEMP}; exit 2" 1 2 3 14 15 19
+
+#---------------------------------------------------------------
+
+# Get the number of compute nodes CPU cores defined in your system
+
+NODEFILE=$TORQUEHOME/server_priv/nodes
+# Parse the NODEFILE to calculate number of CPU cores in the system (from the np= flag)
+NUM_CPUS=`cat $NODEFILE | $AWK '
+{
+	nprocs = 1	# Default value = 1
+	# Field 2 may contain np=(number of CPUs in the node)
+	if (match($2, "^np=")) nprocs = substr($2,4);
+	# DEBUG: printf("Node %s has %s procs\n", $1, nprocs)
+	NUM_CPUS += nprocs
+} END {
+	print NUM_CPUS
+}
+'`
+
+# List the input files 
+echo
+echo "Portable Batch System NODE accounting statistics"
+echo "------------------------------------------------"
+echo
+echo -n "Processing a total of $NUM_FILES accounting files... "
+
+rm -f ${JOBTEMP}
+cat ${ACCT_FILES} | ${PBSJOBS} ${SINGLE} > ${JOBTEMP}
+echo done.
+# Sanity check for empty accounting file
+if test ! -s ${JOBTEMP}
+then
+	echo $0 ERROR: There are no accounting records in the input files:
+	echo ${ACCT_FILES}
+	exit 1
+fi
+
+#---------------------------------------------------------------
+
+cat ${JOBTEMP} | $AWK -v NUM_CPUS=$NUM_CPUS '
+{
+	# Parse input data
+	user	= $2		# User name
+	group	= $3		# Group name
+	queue	= $4		# Queue name
+	nodect	= $5		# Number of nodes used
+	cput	= $6		# CPU time in seconds
+	start	= $9		# Job start time in epoch seconds
+	end	= $10		# Job end time in epoch seconds
+	wall	= $11		# Wallclock time in seconds
+	wait	= $13		# Waiting time in seconds
+	total_ncpus = $14	# Total number of CPUs used (>=nodect)
+	exit_status = $15	# Job Exit_status
+
+	nodect_cput += nodect*cput
+	nodect_wall += nodect*wall
+	ncpus_cput += total_ncpus*cput
+	ncpus_wall += total_ncpus*wall
+	total_wall += wall
+	if (NR == 1) {
+		firstjob = end	# Initialize the first job ending
+		lastjob  = end	# Initialize the last job ending
+	} else {
+		if (end < firstjob) firstjob = end
+		if (end > lastjob)  lastjob  = end
+	}
+
+} END {
+
+	printf("The first job record is dated %s.\nThe last  job record is dated %s.\n",
+		strftime("%c",firstjob), strftime("%c",lastjob))
+	# Note: When changing to/from Daylight Savings Time, 1 month will be shorter/longer
+	# by 1 hour, whereby the number of days may me off by +/-1.
+	NUMDAYS = int((lastjob - firstjob) / 86400) + 1
+	printf("The number of days between first and last job is=%d\n\n", NUMDAYS)
+
+	nodect_cput_days = nodect_cput / 86400
+	nodect_wall_days = nodect_wall / 86400
+	ncpus_cput_days = ncpus_cput / 86400
+	ncpus_wall_days = ncpus_wall / 86400
+	total_wall_days = total_wall / 86400
+	busynodes = nodect_wall / (86400 * NUMDAYS)
+	busycpus = ncpus_wall / (86400 * NUMDAYS)
+
+	printf("Total number of CPUs is %d, and the accounting period is %d days.\n",
+		NUM_CPUS, NUMDAYS)
+	printf("Average number of busy CPU cores=%7.2f which is %5.2f percent of total.\n",
+		busycpus, (100*busycpus)/NUM_CPUS)
+		
+} '
+
+rm -f ${JOBTEMP}
+exit 0

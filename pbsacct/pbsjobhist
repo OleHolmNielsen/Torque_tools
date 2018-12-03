@@ -1,0 +1,153 @@
+#!/bin/sh
+
+# Summarize job information in $PBS/server_priv/accounting/ files.
+
+# Usage: cat <files> | pbsjobhist
+# where <files> are daily record files (such as 200812?? for one month's files).
+
+# The format of Torque accounting records are defined on the page
+# http://www.clusterresources.com/torquedocs21/9.1accounting.shtml
+# For further details see src/include/acct.h:
+#define PBS_ACCT_QUEUE  (int)'Q'        /* Job Queued record */
+#define PBS_ACCT_RUN    (int)'S'        /* Job run (Started) */
+#define PBS_ACCT_RERUN  (int)'R'        /* Job Rerun record */
+#define PBS_ACCT_CHKPNT (int)'C'        /* Job Checkpointed and held */
+#define PBS_ACCT_RESTRT (int)'T'        /* Job resTart (from chkpnt) record */
+#define PBS_ACCT_END    (int)'E'        /* Job Ended/usage record */
+#define PBS_ACCT_DEL    (int)'D'        /* Job Deleted by request */
+#define PBS_ACCT_ABT    (int)'A'        /* Job Abort by server */
+
+# Author: Ole.H.Nielsen@fysik.dtu.dk
+
+# Configure this if necessary:
+AWK=/bin/gawk
+
+# Process accounting records (item separator is semicolon)
+cat - | $AWK -F';' '
+{
+
+# Job id: First part of the $3 field is the jobid (skip domain part)
+split($3,data,".")
+jobid=data[1]
+jobidlist[jobid] = jobid
+delete data		# Cleanup
+
+if ($2=="Q")	{ # Process "Q" (job has been submitted/queued)
+	queuetime[jobid]=$1	# Record date and time
+} else if ($2=="D")	{ # Process "D" (job has been deleted)
+	deletetime[jobid]=$1	# Record date and time
+
+	# The $4 field contains the accounting data
+	ndata = split($4,data," ")
+	# Extract desired values from the rest of the record:
+	for (i=1; i<= ndata; i++) {
+		if (match(data[i], "^requestor="))
+			requestor[jobid] = substr(data[i],RSTART+RLENGTH);
+	}
+} else if ($2=="A")	{ # Process "A" (job has been aborted by server)
+	aborttime[jobid]=$1	# Record date and time
+} else if ($2=="R")	{ # Process "R" (job has been rerun)
+	reruntime[jobid]=$1	# Record date and time
+} else if ($2=="C")	{ # Process "C" (job has been checkpointed)
+	checkpointtime[jobid]=$1	# Record date and time
+} else if ($2=="T")	{ # Process "T" (job has been restarted)
+	restarttime[jobid]=$1	# Record date and time
+} else if ($2=="S")	{ # Process "S" (job has been started)
+	starttime[jobid]=$1	# Record date and time
+	startcount[jobid]++	# Jobs may be attempted to start multiple times
+	total_ncpus[jobid] = 0		# Counting the used total number of CPUs (=processors or cores)
+
+	# The $4 field contains the accounting data
+	ndata = split($4,data," ")
+	# Extract desired values from the rest of the record:
+	for (i=1; i<= ndata; i++) {
+		if (match(data[i], "^user="))
+			user[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^group="))
+			group[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^jobname="))
+			jobname[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^queue="))
+			queue[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^ctime="))
+			ctime[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^qtime="))
+			qtime[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^etime="))
+			etime[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^start="))
+			start[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^exec_host=")) {
+			exec_host[jobid] =	substr(data[i],RSTART+RLENGTH);
+			# The actual node names and processors used are in "exec_host" (separated by "+")
+			# Count the number of processors (CPUs,cores) as the # of items in exec_host:
+			total_ncpus[jobid] = split(exec_host[jobid],processornames,"+")
+		}
+	}
+} else if ($2=="E")	{ # Process "E" (job has ended: job completion)
+	endtime[jobid]=$1	# Record date and time
+	total_ncpus[jobid] = 0		# Counting the used total number of CPUs (=processors or cores)
+
+	# The $4 field contains the accounting data
+	ndata = split($4,data," ")
+	# Extract desired values from the rest of the record:
+	for (i=1; i<= ndata; i++) {
+		if (match(data[i], "^end="))
+			end[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^Exit_status="))
+			status[jobid] =	substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^qtime="))
+			qtime[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^etime="))
+			etime[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^start="))
+			start[jobid] = substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^resources_used.cput="))
+			cput[jobid] =  substr(data[i],RSTART+RLENGTH);
+		else if (match(data[i], "^resources_used.walltime="))
+			wall[jobid] =  substr(data[i],RSTART+RLENGTH);
+	}
+} else if ($3=="PBS_Server")	{ # Unknown, see if it is a "PBS_Server" logfile in stead
+	print "This is NOT an accounting record, it looks like a PBS_Server logfile record:"
+	print $0
+	exit 1
+} else {
+	print "UNKNOWN accounting record:", $0
+}
+delete data	# Cleanup
+
+} END {
+
+	# Print out job summaries
+	for (j in jobidlist) {
+		if (user[j] == 0) user[j] = "unknown"
+		if (group[j] == 0) group[j] = "unknown"
+		printf("%d %s %s ", jobidlist[j], user[j], group[j])
+		if (queuetime[j] != 0) printf("Q=%s ", queuetime[j])
+		if (deletetime[j] != 0) {
+			 printf("D=%s ", deletetime[j])
+			if (requestor[j] != 0) printf("deleted-by:%s ", requestor[j])
+		}
+		if (aborttime[j] != 0) printf("A=%s ", aborttime[j])
+		if (reruntime[j] != 0) printf("R=%s ", reruntime[j])
+		if (checkpointtime[j] != 0) printf("C=%s ", checkpointtime[j])
+		if (restarttime[j] != 0) printf("T=%s ", restarttime[j])
+		if (starttime[j] != 0) {
+			printf("S=%s ", starttime[j])
+			if (startcount[j] > 1) printf("(%d times) ", startcount[j])
+		}
+		if (endtime[j] != 0) {
+			printf("E=%s ", endtime[j])
+			if (cput[j] != 0) printf("CPUt=%s ", cput[j])
+			if (wall[j] != 0) printf("Wallt=%s ", wall[j])
+			# Calculate queued waiting time
+			if (etime[j] > 0)
+				wt = start[j] - etime[j]        # Time spent waiting to run
+			else
+				wt = start[j] - qtime[j]        # Use qtime if etime==0
+			if (wt > 0) printf("Qwaitt=%2.2d:%2.2d:%2.2d ", wt/3600, (wt/60)%60, wt%60)	# Convert wt to hh:mm:ss
+		}
+		printf("\n")
+	}
+}
+'

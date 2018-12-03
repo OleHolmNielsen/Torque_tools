@@ -1,0 +1,245 @@
+#!/bin/sh
+
+# Summarize USER accounting information from PBS accounting files
+# located in $PBSHOME/server_priv/accounting/
+
+# The accompanying script "pbsjobs" extracts simplified records
+# of completed jobs.
+
+# Usage: pbsacct [flags] <accounting-files>
+# where:
+# flags (optional) may be:
+#    -g groupid   # Print only accounting data for this group
+#    -G           # Print only groupwise summed accounting data
+# accounting-files are daily PBS records (such as 20000705)
+# Author:	Ole.H.Nielsen@fysik.dtu.dk
+# Thanks to:	Miroslaw.Prywata@fuw.edu.pl
+
+#---------------------------------------------------------------
+
+BINDIR=/usr/local/bin
+GROUPID=""
+ALLGROUPS=0
+SORTCOLUMN=5
+MAUI_NODEACCESSPOLICY="SHARED"
+
+if [ -z "$1" ] ; then
+	echo "Usage: $0 [-g groupid | -G ] accounting-files";
+	exit 1
+fi
+
+# 
+case $1 in
+	-g) GROUPID=$2
+	    SORTCOLUMN=5
+	    shift; shift; ;;
+	-G) ALLGROUPS=1
+	    SORTCOLUMN=4
+	    shift; ;;
+esac
+
+# Verify that the MAUI_NODEACCESSPOLICY is consistent with current MAUI config
+SHOWCONFIG=$BINDIR/showconfig
+if test -x $SHOWCONFIG
+then
+	NODEACCESSPOLICY=`$SHOWCONFIG | grep NODEACCESSPOLICY | awk '{print $2}'`
+	if test "$MAUI_NODEACCESSPOLICY" != "$NODEACCESSPOLICY"
+	then
+		echo ERROR: Inconsistent MAUI NODEACCESSPOLICY:
+		echo $MAUI_NODEACCESSPOLICY is not = $NODEACCESSPOLICY
+		exit 1		# We decide to bail out here (may be omitted)
+	fi
+fi
+
+# Accounting for entire nodes in stead of #CPU cores used.
+if test $MAUI_NODEACCESSPOLICY = "SHARED"
+then
+	# Case of shared nodes
+	SINGLE=""
+else
+	# Case where entire nodes are reserved
+	SINGLE="-S"
+fi
+
+# Accounting-files:
+ACCT_FILES=$*
+NUM_FILES=$#
+# Sanity check
+for f in ${ACCT_FILES}
+do
+	if [ ! -r $f ]
+	then
+		echo ERROR: File $f is unreadable:
+		ls -la $f
+		exit 1
+	fi
+done
+
+# The pbsjobs accounting-information extractor script:
+# May be set by an environment variable.
+if [ -z "${PBSJOBS}" ] ; then
+	PBSJOBS="${BINDIR}/pbsjobs";
+fi
+if [ ! -x "${PBSJOBS}" ] ; then
+	echo No ${PBSJOBS} executable found
+	exit 1
+fi
+
+# A working file
+JOBTEMP=/tmp/pbsjobs.$$
+# Trap error signals:
+trap "rm -f ${JOBTEMP}; exit 2" 1 2 3 14 15 19
+
+#---------------------------------------------------------------
+
+# List the input files 
+echo
+echo "Portable Batch System accounting statistics"
+echo "-------------------------------------------"
+echo
+echo -n "Processing a total of $NUM_FILES accounting files... "
+
+rm -f ${JOBTEMP}
+cat ${ACCT_FILES} | ${PBSJOBS} ${SINGLE} > ${JOBTEMP}
+echo done.
+
+# List first and last job records
+cat ${JOBTEMP} | awk '
+{
+	end	= $10		# Job end time in epoch seconds
+	if (NR == 1) {
+		firstjob = end	# Initialize the first job ending
+		lastjob  = end	# Initialize the last job ending
+	} else {
+		if (end < firstjob) firstjob = end
+		if (end > lastjob)  lastjob  = end
+	}
+} END {
+	printf("The first job record is dated %s.\nThe last  job record is dated %s.\n",
+		strftime("%c",firstjob), strftime("%c",lastjob))
+}'
+
+#---------------------------------------------------------------
+
+if test $ALLGROUPS -eq 0
+then
+	# User statistics
+	echo
+	echo "                          Wallclock          Average Average"
+	echo "Username    Group   #jobs      days  Percent  #nodes  q-days  Full name"
+	echo "--------    -----   ----- ---------  ------- ------- -------  ---------"
+else
+	# Group statistics
+	echo
+	echo "                 Wallclock          Average Average"
+	echo "   Group   #jobs      days  Percent  #nodes  q-days"
+	echo "   -----   ----- ---------  ------- ------- -------"
+fi
+
+cat ${JOBTEMP} | awk -vGROUPID=$GROUPID -vALLGROUPS=$ALLGROUPS '
+BEGIN {
+	# First get the list of user full names from /etc/passwd lines
+	while ((getline < "/etc/passwd") > 0) {
+		split($0,b,":")		# Split password line into fields
+		fullname[b[1]] = b[5]	# Full name b[5] of this username (b[1])
+	}
+	close("/etc/passwd")
+}
+{
+	# Parse input data
+	user	= $2		# User name
+	group	= $3		# Group name
+	queue	= $4		# Queue name
+	nodect	= $5		# Number of nodes used
+	cput	= $6		# CPU time in seconds
+	start	= $9		# Job start time in epoch seconds
+	end	= $10		# Job end time in epoch seconds
+	wall	= $11		# Wallclock time in seconds
+	wait	= $13		# Waiting time in seconds
+	total_ncpus = $14	# Total number of CPUs used (>=nodect)
+	exit_status = $15	# Job Exit_status
+
+	# For accounting by number of CPU cores in stead of number of nodes,
+	# uncomment the following line:
+	nodect = total_ncpus
+
+	# User accounting (a user may belong to several groups)
+	username[user,group] = user
+	usergroup[user,group] = group
+	jobs[user,group]++
+	cpunodes[user,group] += nodect*cput
+	wallnodes[user,group] += nodect*wall
+	wallcpu[user,group] += wall
+	if (nodect < minnodes[user,group]) minnodes[user,group] = nodect
+	if (nodect > maxnodes[user,group]) maxnodes[user,group] = nodect
+	waittime[user,group] += wait
+
+	# Group accounting
+	groupname[group]=group
+	gr_jobs[group]++
+	gr_cpunodes[group] += nodect*cput
+	gr_wallnodes[group] += nodect*wall
+	gr_wallcpu[group] += wall
+	if (nodect < gr_minnodes[group]) gr_minnodes[group] = nodect
+	if (nodect > gr_maxnodes[group]) gr_maxnodes[group] = nodect
+	gr_waittime[group] += wait
+
+	# TOTAL accounting
+	totaljobs++
+	totalwait += wait
+	cpunodesecs += nodect*cput
+	wallnodesecs += nodect*wall
+	wallsecs += wall
+} END {
+	cpunodedays = cpunodesecs / 86400
+	wallnodedays = wallnodesecs / 86400
+	walldays = wallsecs / 86400
+
+	if (ALLGROUPS == 0) {
+
+		groupjobs = 0
+		groupdays = 0
+		for (user in username) {
+			if (length(GROUPID) > 0 && usergroup[user] != GROUPID) continue
+			if (wallcpu[user] > 0)
+				printf("%8.8s %8.8s %7d  %8.2f  %7.2f %7.2f %7.2f  %s\n",
+				username[user], usergroup[user], jobs[user], 
+				wallnodes[user]/86400, wallnodes[user]/(864*wallnodedays),
+				wallnodes[user]/wallcpu[user], waittime[user]/jobs[user]/86400, fullname[user])
+			groupjobs += jobs[user]
+			groupnodedays += wallnodes[user]/86400
+			groupdays += wallcpu[user]/86400
+			groupwait += waittime[user]
+		}
+		# Print out total usage
+		printf("%8s %8s %7d  %8.2f  %7.2f %7.2f %7.2f\n",
+			"TOTAL", "-", totaljobs, wallnodedays, 100,
+			wallnodedays/walldays,
+			totalwait/totaljobs/86400)
+		# Print out group usage
+		if (length(GROUPID) > 0 && groupjobs > 0)
+			printf("%8s %8s %7d  %8.2f  %7.2f %7.2f %7.2f\n",
+				"GROUP", GROUPID, groupjobs, groupnodedays,
+				100*groupnodedays/wallnodedays,
+				groupnodedays/groupdays, groupwait/groupjobs/86400)
+	} else {
+
+		# Per-group accounting
+
+		for (group in groupname) {
+			printf("%8s %7d  %8.2f  %7.2f %7.2f %7.2f\n",
+				groupname[group], gr_jobs[group], 
+				gr_wallnodes[group]/86400, gr_wallnodes[group]/(864*wallnodedays),
+				gr_wallnodes[group]/gr_wallcpu[group],
+				gr_waittime[group]/gr_jobs[group]/86400)
+		}
+		printf("%8s %7d  %8.2f  %7.2f %7.2f %7.2f\n",
+			"TOTAL", totaljobs, wallnodedays, 100,
+			wallnodedays/walldays,
+			totalwait/totaljobs/86400)
+	}
+		
+} ' | sort -r -n -k $SORTCOLUMN 
+
+rm -f ${JOBTEMP}
+exit 0

@@ -1,0 +1,43 @@
+        Portable Batch System (PBS) Contributed Software License
+
+Acknowledgment: The Portable Batch System Software was originally developed
+as a joint project between the Numerical Aerospace Simulation (NAS) Systems
+Division of NASA Ames Research Center and the National Energy Research
+Supercomputer Center (NERSC) of Lawrence Livermore National Laboratory.
+
+Redistribution of software contributed for use with the Portable Batch System
+and for inclusion on the PBS web site, and for use in source and binary forms,
+with or without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above acknowledgment notices,
+  this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above acknowledgment
+  notices, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+
+- All advertising materials mentioning features or use of this software must
+  display the following acknowledgment:
+
+  The Portable Batch System includes software developed by NASA Ames Research
+  Center, Lawrence Livermore National Laboratory, and MRJ Technology Solutions.
+
+        DISCLAIMER OF WARRANTY
+
+THIS SOFTWARE IS PROVIDED BY MRJ TECHNOLOGY SOLUTIONS ("MRJ") "AS IS" WITHOUT  
+WARRANTY OF ANY KIND, AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT ARE EXPRESSLY DISCLAIMED.
+
+IN NO EVENT, UNLESS REQUIRED BY APPLICABLE LAW, SHALL MRJ, NASA, NOR
+THE U.S. GOVERNMENT BE LIABLE FOR ANY DIRECT DAMAGES WHATSOEVER,
+NOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+This license will be governed by the laws of the Commonwealth of Virginia,
+without reference to its choice of law rules.

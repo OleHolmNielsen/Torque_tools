@@ -1,0 +1,70 @@
+#!/bin/bash
+
+#
+# Generate monthly accounting statistics from Torque
+#
+
+TORQUEHOME=/var/spool/torque
+BINDIR=/usr/local/bin
+
+# CONFIGURE THIS for your local environment:
+# People who will receive the report
+SUBSCRIBERS=root@localhost
+SYSTEMNAME="NIFLHEIM"
+
+# UNIX groups for which separate reports will be generated
+GROUP_LIST="camdfac campvip campstud campext cinffac cinfvip cinfstud ecs ecsfac ecsvip ecsstud mic ntchfac ntchvip ntchstud mek mekfac mekvip mekstud fotonik qwise chemku nexmap nexfac nexvip nexstud nexguest nexext"
+
+MONTH_NUMBER=`/bin/date +%m`
+PREV_MONTH_NUMBER=`echo $MONTH_NUMBER | awk '{printf("%2.2d\n", $1 - 1)}'`
+YEAR=`/bin/date +%Y`
+START_YEAR=$YEAR
+
+if [ $PREV_MONTH_NUMBER = "00" ]; then
+  PREV_MONTH_NUMBER=12
+  START_YEAR=`expr $START_YEAR - 1`
+fi
+
+PREV_MONTH=`${BINDIR}/mm2month $PREV_MONTH_NUMBER`
+
+# Go the the Torque accounting directory
+cd ${TORQUEHOME}/server_priv/accounting
+
+# Accounting filenames are YYYYMMDD:
+MONTHFILES=${START_YEAR}${PREV_MONTH_NUMBER}??
+REPORT=Report.${PREV_MONTH}_${START_YEAR}
+${BINDIR}/pbsacct ${MONTHFILES} > ${REPORT}
+# Append the group-wise accounting summary
+${BINDIR}/pbsacct -G ${MONTHFILES} >> ${REPORT}
+# Append the node accounting summary
+${BINDIR}/pbsnodect ${MONTHFILES} >> ${REPORT}
+
+# Local addition:
+# Make group accounting sub-reports
+for g in $GROUP_LIST
+do
+	echo >> ${REPORT}
+	echo "====================================================" >> ${REPORT}
+	echo >> ${REPORT}
+	echo Accounting for group $g >> ${REPORT}
+	${BINDIR}/pbsacct -g $g ${MONTHFILES} >> ${REPORT}
+done
+
+# Move global history files to private directory.
+# SAVEDIR=${PREV_MONTH}_${START_YEAR}
+# mkdir ${SAVEDIR}
+# mv ${MONTHFILES} ${SAVEDIR}
+# gzip ${SAVEDIR}/*
+
+# Mail monthly report to a list of users (acct_list in /etc/aliases)
+cat ${REPORT} | /bin/mail -s "$SYSTEMNAME batch job accounting for $PREV_MONTH $START_YEAR" ${SUBSCRIBERS}
+
+# Copy report to web-accessible directory as well
+WEBDIR=/home/camp/graphs/
+if test -d $WEBDIR
+then
+	cp -p ${REPORT} $WEBDIR
+else
+	echo Web directory $WEBDIR not accessible!
+	ls -lad $WEBDIR
+fi

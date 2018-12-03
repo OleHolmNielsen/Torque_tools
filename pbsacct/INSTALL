@@ -1,0 +1,45 @@
+
+How to install the PBS accounting tools:
+----------------------------------------
+
+1. Check (and reconfigure) the location of system files:
+
+   TORQUEHOME=/var/spool/torque (in pbsjobs, pbsnodect and pbsreportmonth)
+   BINDIR=/usr/local/bin (in pbsacct, pbsnodect and pbsreportmonth)
+
+
+2. Copy the files pbs* and mm2month to $BINDIR:
+
+   cp pbs* mm2month /usr/local/bin/
+
+
+3. Ensure that you have read-access to the accounting files.
+You may need to be root for this, or you may want to relax
+the permissions on $PBSHOME/server_priv so that ordinary
+users may read the accounting directory.  For example:
+
+   chmod 751 $TORQUEHOME/server_priv
+   chmod 755 $TORQUEHOME/server_priv/accounting
+
+may allow read-access for all users.  Ensure that the
+server's accounting files are readable, too (seems to
+be the default with PBS v2.2).
+
+
+4. Test that pbsacct works correctly:
+   cd <Report-directory>
+   pbsacct <accounting-files>
+
+
+5. The script "pbsreportmonth" is a convenient way to automatically
+generate a monthly report for the previous month. Edit the E-mail
+addresses in the script:
+
+# People who will receive the report
+SUBSCRIBERS="user1 user2..."
+
+It may be run on the first day of every month using crontab with
+a line like this:
+
+0 2 1 * * (cd <Report-directory>; /usr/local/bin/pbsreportmonth)
+
