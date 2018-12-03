@@ -1,0 +1,20 @@
+#!/bin/sh
+
+# Do "kill -9" on a node, exclude system processes
+# Usage: sshkill nodename(s) PIDs
+
+KILL="/bin/kill -9"
+SSH="ssh -n -x"
+PING="/bin/ping -c 1 -w 3"
+
+NODE=$1
+shift
+PIDLIST=$*
+
+echo Node $NODE processes $PIDLIST
+if $PING $NODE 2>&1 > /dev/null
+then
+	$SSH $NODE $KILL $PIDLIST
+else
+	echo '*** WARNING ***' Cannot ping host ${NODE} !
+fi

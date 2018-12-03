@@ -1,0 +1,89 @@
+#!/bin/sh
+
+# Wipe dead job: Stop job's pbs_mom daemons, remove job files, restart pbs_mom.
+# Usage: wipejob job-id
+
+# Author: Ole Holm Nielsen, Ole.H.Nielsen@fysik.dtu.dk
+
+SSH="ssh -n -x"
+PING="/bin/ping -c 1 -w 3"
+# Torque commands used
+QSTAT=/usr/local/bin/qstat
+QDEL=/usr/local/bin/qdel
+# Mail program
+MAIL=/bin/mail
+
+# Name of this cluster
+CLUSTERNAME=NIFLHEIM
+# Mail to the superuser
+SUPERUSERMAIL=root@audhumbla.fysik.dtu.dk
+# Temporary file
+JOBSTATUS=/tmp/jobstatus.$$
+
+# Catch signals
+trap "rm -f $JOBSTATUS; exit 2" 1 2 3 14 15 19
+
+# Check command arguments
+if test $# -ne 1
+then
+	echo Usage: $0 job-id
+	exit 1
+fi
+JOB=$1
+action_done='wiped'
+
+# Check if this job-ID can be inquired successfully.
+# (The qstat flag "-1" is only available from Torque 2.1)
+$QSTAT -f -1 $JOB > $JOBSTATUS
+if test "$?" != "0"
+then
+	echo Error inquiring about job $JOB 
+	exit 1
+fi
+
+# Check the job state
+JOBSTATE="`cat $JOBSTATUS | grep job_state | awk '{print $3}'`"
+if test "$JOBSTATE" != "R"
+then
+	echo The job $JOB is not running, it has state=$JOBSTATE
+	exit 1
+fi
+
+# Get the Torque resource exec_host
+# Replace "+" by newline for "+"-separated nodelists from Torque
+# Print only unique nodenames ("uniq" command) because SMP nodes may be repeated
+NODELIST="`cat $JOBSTATUS | grep exec_host | awk '{print $3}'| sed -e 's/\/.//g' -e 's/+/\n/g' | uniq`"
+if test -z "$NODELIST"
+then
+	echo Error: The node list is empty
+	exit 1
+fi
+
+# Get the number of nodes and node properties used
+NODES="`cat $JOBSTATUS | grep Resource_List.nodes | awk '{print $3}'`"
+echo This job uses $NODES nodes
+echo Nodelist for job-id $JOB: $NODELIST
+
+# Loop over nodes and execute the "ps" command
+for node in $NODELIST
+do
+	echo '----- Node' $node '-----'
+	if $PING $node 2>&1 > /dev/null
+	then
+		$SSH $node service pbs_mom stop
+		echo Removing Torque job files for job $JOB on node $node
+		$SSH $node "rm -rf /var/spool/torque/mom_priv/jobs/$JOB*"
+		$SSH $node service pbs_mom start
+	else
+		echo '*** WARNING ***' Cannot ping host ${node} !
+	fi
+done
+
+echo Delete and purge job $JOB
+$QDEL -p $JOB
+
+# Send mail to the user
+echo Sending mail to user $SUPERUSERMAIL
+cat $JOBSTATUS | $MAIL -s "WARNING: $CLUSTERNAME job $JOB has been ${action_done} by the superuser" $SUPERUSERMAIL
+
+rm -f $JOBSTATUS

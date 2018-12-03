@@ -1,0 +1,223 @@
+#!/bin/sh
+
+# Notify about or Kill a badly behaving job and send information mail to the user.
+# Author: Ole Holm Nielsen, Ole.H.Nielsen@fysik.dtu.dk
+
+# Command usage:
+USAGE="Usage: $0 '[-k]' job-id"
+
+# Location of Torque commands used
+QSTAT=/usr/local/bin/qstat
+QDEL=/usr/local/bin/qdel
+# Location of locally developed commands needed
+SSHJOB=/usr/local/bin/sshjob
+PESTAT=/usr/local/bin/pestat
+# Mail program
+MAIL=/bin/mail
+
+# Name of this cluster
+CLUSTERNAME=NIFLHEIM
+# Mail to the system managers
+ADMINMAIL=support@fysik.dtu.dk
+# Mail to the superuser
+SUPERUSERMAIL=root@audhumbla.fysik.dtu.dk
+# Whether to kill job or not
+killjob=0
+# Temporary files
+JOBSTATUS=/tmp/jobstatus.$$ 
+QSTATERRS=/tmp/qstaterrs.$$ 
+# Catch signals
+trap "rm -f $JOBSTATUS $QSTATERRS; exit 2" 1 2 3 14 15 19
+
+# Process command arguments
+while getopts "k" options; do
+	case $options in
+		k ) killjob=1
+			shift;;
+		* ) echo $USAGE
+			exit 1;;
+	esac
+done
+
+# Get the jobid as the next argument
+if test $# -eq 1 
+then
+	JOB=$1
+else
+	echo $USAGE
+	exit 1
+fi
+
+# Define strings to be used in the report
+if test $killjob -eq 1
+then
+	action='Kill'
+	action_done='killed'
+	action_print="Your $CLUSTERNAME job id $JOB has been ${action_done} by the superuser."
+else
+	action='Notify about'
+	action_done='investigated'
+	action_print="Please contact ${ADMINMAIL}: your $CLUSTERNAME job id $JOB may have to be killed."
+fi
+
+# The job id is the command argument
+echo "${action} a badly behaving job id $JOB"
+
+# Inquire about the reason for notifying/killing this job
+reason01="Your job is doing no useful work and is essentially dead."
+reason02="Your job has grossly exceeded the available physical RAM memory and is very inefficient."
+reason03="Your job has grossly exceeded the physical RAM memory available per CPU core."
+reason04="Your job is running too many processes and is overloading the CPU(s)."
+reason05="Your job is not using all of the CPU cores that you have requested."
+reason06="Your job is not laid out correctly for multi-CPU nodes (ppn=4)."
+reason07="Your job requests resources that cannot be satisfied or do not exist."
+reason08="Your job is unfortunately running on a node that has a hardware or electrical error."
+reason09="Error in the input file caused job to fail."
+reason10="Job failed - please examine the output file."
+reason11="SCF convergence problems - please examine the output file."
+reason12="Your job seems to be very inefficient with a low CPU utilization."
+reason20="Please ask $ADMINMAIL for the reason."
+ANS=-1
+while test $ANS -le 0
+do
+	echo
+	echo Please select one of the following reasons why you want to notify/kill this job:
+	echo "  1. $reason01"
+	echo "  2. $reason02"
+	echo "  3. $reason03"
+	echo "  4. $reason04"
+	echo "  5. $reason05"
+	echo "  6. $reason06"
+	echo "  7. $reason07"
+	echo "  8. $reason08"
+	echo "  9. $reason09"
+	echo " 10. $reason10"
+	echo " 11. $reason11"
+	echo " 12. $reason12"
+	echo " 20. $reason20"
+	read -p "Please enter reason (no default): " ANS
+	case $ANS in
+		1) action_reason=$reason01;;
+		2) action_reason=$reason02;;
+		3) action_reason=$reason03;;
+		4) action_reason=$reason04;;
+		5) action_reason=$reason05;;
+		6) action_reason=$reason06;;
+		7) action_reason=$reason07;;
+		8) action_reason=$reason08;;
+		9) action_reason=$reason09;;
+	       10) action_reason=$reason10;;
+	       11) action_reason=$reason11;;
+	       12) action_reason=$reason12;;
+	       20) action_reason=$reason20;;
+		*) ANS=-1;;
+	esac
+done
+echo Reason: $action_reason
+echo
+
+# Information to the user
+cat <<EOF > $JOBSTATUS
+
+*** WARNING ***
+
+${action_print}
+
+Reason: ${action_reason}
+
+If you have any questions about this action, please contact ${ADMINMAIL}. 
+
+You may want to consult the Niflheim Wiki page about batch job information:
+https://wiki.fysik.dtu.dk/niflheim/Batch_jobs#submitting-batch-jobs
+
+In the following we display various pieces of information about your badly behaving batch job.
+
+Torque batch system information about job id $JOB:
+---------------------------------------------------
+
+EOF
+
+# Get job information
+echo -n Get job information...
+$QSTAT -f $JOB >> $JOBSTATUS 2>> $QSTATERRS
+# Check for errors from qstat
+if test -s $QSTATERRS
+then
+	echo
+	cat $QSTATERRS
+	exit 1
+fi
+
+# Get user E-mail address and name
+USERMAIL=`grep Job_Owner $JOBSTATUS | awk '{print $3}'`
+USERID=`echo $USERMAIL | awk -F@ '{print $1}'`
+FULLNAME=`grep "^$USERID:" /etc/passwd | awk -F: '{print $5}'`
+# Maybe the user wants to notify this address
+NOTIFYMAIL=`grep Mail_Users $JOBSTATUS | awk '{print $3}'`
+
+# Is the job still in a queued state ?
+JOBSTATE=`grep job_state $JOBSTATUS | awk '{print $3}'`
+if test "$JOBSTATE" = "Q"
+then
+	echo NOTE: This job has a state of QUEUED
+	JOBQUEUED=1
+else
+	JOBQUEUED=0
+fi
+
+# Only print job information for running jobs
+if test "$JOBQUEUED" = 0
+then
+	# Memory and CPU usage
+	cat <<EOF >> $JOBSTATUS
+
+RAM-memory usage and CPU-load usage of your job on the job nodes.
+-----------------------------------------------------------------
+
+Please look at these usage numbers to determine why the job was behaving badly
+(note especially items marked by *): 
+
+  node state  load    pmem ncpu   mem   resi usrs tasks  jobids/users 
+EOF
+
+	# Print job memory and CPU usage by pestat (local command)
+	echo -n RAM and CPU usage...
+	$PESTAT | grep $JOB >> $JOBSTATUS
+	cat <<EOF >> $JOBSTATUS
+
+Explanation of some columns in the usage list:
+node: The compute node running your job.
+load: The CPU load average (should not exceed the number of physical CPUs).
+pmem: Physical memory (MB) in the node.
+ncpu: Number of physical CPUs in the node.
+resi: Resident memory (MB) in use (should not exceed the physical memory by too much).
+EOF
+
+	# Information about the job processes on the nodes
+	cat <<EOF >> $JOBSTATUS
+
+Process information on the nodes of your job.
+---------------------------------------------
+
+Please look at these processes to determine why the job was behaving badly: 
+
+EOF
+
+	# Print job processes by sshjob (local command)
+	echo -n Process status...
+	$SSHJOB $JOB >> $JOBSTATUS
+	echo Done.
+fi
+
+# Delete the job
+if [ "${killjob}" = "1" ]; then
+    echo Now deleting job $JOB
+    $QDEL $JOB
+fi
+
+# Send mail to the user
+echo Sending mail to user=$USERMAIL full name: $FULLNAME
+(echo Dear $FULLNAME ; cat $JOBSTATUS) | $MAIL -s "WARNING: ${action_print}" -b $SUPERUSERMAIL $USERMAIL $NOTIFYMAIL
+
+# Clean up
+rm -f $JOBSTATUS $QSTATERRS

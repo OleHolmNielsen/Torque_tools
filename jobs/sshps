@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# Do "ps aux" on a node, exclude system processes
+# Usage: sshps nodename(s)
+
+PS="/bin/ps"
+PSFLAGS="-o pid,state,user,start,cputime,%cpu,rssize,command --columns 100"
+SSH="ssh -n -x"
+PING="/bin/ping -c 1 -w 3"
+
+# System users excluded from the list
+USERLIST="root rpc rpcuser daemon ntp smmsp sshd hpsmh named dbus"
+
+# Replace "+" by " " for "+"-separated nodelists from PBS
+NODES=`echo $* | sed 's/+/ /g'`
+# echo Nodelist: $NODES
+
+for node in $NODES
+do
+	echo Node ${node}: `pbsnodes -a $node | grep 'jobs = '`
+	if $PING $node 2>&1 > /dev/null
+	then
+		$SSH $node $PS $PSFLAGS --deselect -u \""$USERLIST"\"
+	else
+		echo '*** WARNING ***' Cannot ping host ${node} !
+	fi
+done

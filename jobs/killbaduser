@@ -1,0 +1,128 @@
+#!/bin/sh
+
+#
+# On a Torque/PBS compute node, list and kill any user processes not belonging to batch jobs.
+#
+# Usage: killbaduser [-k] [-s] [-v]
+#    -k will execute the kill command 
+#    -s will sleep a random number of seconds
+#    -v verbose output for debugging
+# Author: Ole Holm Nielsen, Department of Physics, Technical University of Denmark
+# Version: 1.5
+#
+
+###  CONFIGURE:  ###
+# The list of OK system user-ids:
+USERLIST="root rpc rpcuser daemon ntp smmsp sshd hpsmh named dbus"
+# Don't kill processes with UID < UIDMIN
+UIDMIN=250
+
+###  CONFIGURE:  ###
+# Commands which we use:
+PRINTJOB=/usr/local/bin/printjob
+# Torque spool directory
+SPOOLDIR=/var/spool/torque
+
+#
+# Process command options
+#
+DOKILL=0
+DOSLEEP=0
+VERBOSE=0
+while getopts "ksv" options; do
+	case $options in
+		k ) DOKILL=1;;
+		s ) DOSLEEP=1;;
+		v ) VERBOSE=1;;
+		* ) echo Usage: $0 "[-k] [-s] [-v]"
+			exit 1;;
+	esac
+done
+
+if test ${VERBOSE} -eq 1
+then
+	echo This node has name: $HOSTNAME
+fi
+
+#
+# Sleep a random number of seconds so servers doesn't get overloaded
+# if all nodes run this script simultaneously.
+#
+if test ${DOSLEEP} -eq 1
+then
+	# Initialize /bin/bash built-in random number generator with PID
+	RANDOM=$$
+	MAXSLEEP=10
+	INTERVAL=$(($RANDOM % $MAXSLEEP))
+	if test ${VERBOSE} -eq 1
+	then
+		echo Sleeping $INTERVAL seconds
+	fi
+	sleep $INTERVAL
+fi
+
+#
+# Get batch job user-ids and append to USERLIST
+#
+# Each job has a XXX.JB file in the jobs/ directory
+JOBLIST="`ls $SPOOLDIR/mom_priv/jobs/*.JB 2>/dev/null`"
+for job in $JOBLIST
+do
+	EUSER=`$PRINTJOB $job | grep 'euser =' | awk '{print $3}'`
+	if test ${VERBOSE} -eq 1
+	then
+		echo `$PRINTJOB $job | grep jobid:` with user-id $EUSER
+	fi
+	USERLIST="$USERLIST $EUSER"
+done
+if test ${VERBOSE} -eq 1
+then
+	echo List of OK users: $USERLIST
+fi
+
+#
+# Print the process list, deselecting acceptable user-ids.
+#
+if test ${VERBOSE} -eq 1
+then
+	echo List of rogue processes:
+fi
+PSFLAGS="--no-headers -o pid,state,uid,user,command"
+ps --deselect -u "$USERLIST" $PSFLAGS
+
+#
+# Kill rogue user processes
+#
+if test ${DOKILL} -eq 1
+then
+	PIDLIST=`ps --deselect -u "$USERLIST" $PSFLAGS | awk -v UIDMIN=$UIDMIN '
+	{
+		PID=$1; UID=$3
+		if (UID > $UIDMIN) PIDLIST = PIDLIST sprintf("%d ", PID)
+	} END {
+		if (length(PIDLIST) > 0) print PIDLIST
+	}'`
+	# Kill rogue processes, if any
+	if test -n "$PIDLIST"
+	then
+		echo Killing rogue processes $PIDLIST
+		# Troy Baer safe version: SIGCONT; sleep; SIGTERM; sleep; SIGKILL
+		if test ${VERBOSE} -eq 1
+		then
+			echo Sending CONT signal
+		fi
+		kill -s CONT $PIDLIST
+		sleep 1
+		if test ${VERBOSE} -eq 1
+		then
+			echo Sending TERM signal
+		fi
+		kill -s TERM $PIDLIST
+		sleep 5
+		if test ${VERBOSE} -eq 1
+		then
+			echo Sending KILL signal
+		fi
+		kill -s KILL $PIDLIST
+	fi
+fi
