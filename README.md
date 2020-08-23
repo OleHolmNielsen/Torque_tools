@@ -1,9 +1,7 @@
 # Torque_tools
 My tools for the Torque resource manager
 
-This repository contains a historical archive of Torque tools which were
-previously available from http://ftp.fysik.dtu.dk/Torque/ or
-ftp://ftp.fysik.dtu.dk/Torque/
+This repository contains a historical archive of Torque tools which were previously available from ftp.fysik.dtu.dk/Torque/ .
 
 Tools
 -----
